@@ -55,6 +55,10 @@ function getChat(state: GatewayStore, key: string): SessionChat {
   return state.sessionChats[key] ?? { messages: [], streaming: false, streamingRunId: null }
 }
 
+// Module-level lock so React StrictMode / HMR double-invocations don't
+// spin up multiple WebSocket connections.
+let _connectLock = false
+
 export const useGatewayStore = create<GatewayStore>((set, get) => ({
   client: null,
   clientState: 'disconnected',
@@ -74,6 +78,13 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
   },
 
   connect: () => {
+    // Prevent concurrent connect() calls (React StrictMode, HMR, rapid clicks)
+    if (_connectLock) {
+      console.log('[gateway] connect() called while lock held — ignoring')
+      return
+    }
+    _connectLock = true
+
     const { gatewayUrl, token, client: oldClient } = get()
     if (oldClient) oldClient.disconnect()
 
@@ -88,12 +99,18 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
       url: gatewayUrl,
       token: token || undefined,
       onStateChange: (clientState) => {
+        // Release the lock once we leave 'connecting'/'authenticating'
+        if (clientState === 'connected' || clientState === 'error' || clientState === 'disconnected') {
+          _connectLock = false
+        }
         set({ clientState, error: clientState === 'error' ? get().error : null })
       },
       onDisconnect: (reason) => {
+        _connectLock = false
         set({ error: reason })
       },
       onDevicePairingRequired: () => {
+        _connectLock = false
         set({ pairingRequired: true })
       },
       onChat: (payload) => {
@@ -181,6 +198,7 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
   },
 
   disconnect: () => {
+    _connectLock = false
     const { client } = get()
     if (client) client.disconnect()
     set({ client: null, clientState: 'disconnected' })

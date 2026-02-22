@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect } from 'react'
 import { SessionBar } from './components/SessionBar'
 import { WidgetPanel } from './components/WidgetPanel'
 import { ChatPanel } from './components/ChatPanel'
@@ -6,12 +6,11 @@ import { useGatewayStore } from './store/gateway'
 
 export function App() {
   const { connect, clientState, gatewayUrl } = useGatewayStore()
-  const hasConnected = useRef(false)
 
-  // Auto-connect on mount if we have a URL configured
+  // Auto-connect on mount. The store-level _connectLock handles StrictMode's
+  // double-invocation — only the first call proceeds, the second is ignored.
   useEffect(() => {
-    if (!hasConnected.current && gatewayUrl) {
-      hasConnected.current = true
+    if (gatewayUrl && clientState === 'disconnected') {
       connect()
     }
   }, [])

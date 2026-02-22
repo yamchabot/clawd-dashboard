@@ -85,10 +85,14 @@ export class GatewayClient {
   disconnect() {
     if (this.reconnectTimer) clearTimeout(this.reconnectTimer)
     if (this.ws) {
+      // Null ALL handlers before closing so in-flight messages are silently dropped
+      this.ws.onmessage = null
+      this.ws.onerror = null
       this.ws.onclose = null
       this.ws.close()
       this.ws = null
     }
+    this.connected = false
     this.setState('disconnected')
   }
 
