@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useWidgetStore, type WidgetDef } from '../store/widgets'
 import { useGatewayStore } from '../store/gateway'
 import { WidgetRunner } from './WidgetRunner'
+import { PRESET_WIDGETS, type PresetDef } from '../widgets/presets'
 
 // ── Widget Edit Modal ─────────────────────────────────────────────────────────
 function WidgetEditModal({
@@ -90,6 +91,56 @@ function WidgetEditModal({
   )
 }
 
+// ── Widget Library Picker ─────────────────────────────────────────────────────
+function WidgetPickerModal({
+  onAdd,
+  onClose,
+}: {
+  onAdd: (preset: PresetDef) => void
+  onClose: () => void
+}) {
+  const [added, setAdded] = useState<Set<string>>(new Set())
+
+  const handleAdd = (preset: PresetDef) => {
+    onAdd(preset)
+    setAdded((prev) => new Set(prev).add(preset.id))
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-card" style={{ width: '700px', maxWidth: '96vw' }}>
+        <div className="modal-title">📦 Widget Library</div>
+        <div className="modal-subtitle">
+          Click a widget to add it to your panel. You can edit it afterward.
+        </div>
+
+        <div className="preset-grid">
+          {PRESET_WIDGETS.map((preset) => {
+            const wasAdded = added.has(preset.id)
+            return (
+              <button
+                key={preset.id}
+                className={`preset-card${wasAdded ? ' added' : ''}`}
+                onClick={() => handleAdd(preset)}
+                title={preset.description}
+              >
+                <div className="preset-card-icon">{preset.icon}</div>
+                <div className="preset-card-name">{preset.title}</div>
+                <div className="preset-card-desc">{preset.description}</div>
+                {wasAdded && <div className="preset-card-check">✓ Added</div>}
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="modal-actions">
+          <button className="btn btn-ghost" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Widget Card ───────────────────────────────────────────────────────────────
 function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number; total: number }) {
   const { updateWidget, removeWidget, widgets, saveAll } = useWidgetStore()
@@ -119,9 +170,11 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
     saveAll(reordered.map((w, i) => ({ ...w, order: i })))
   }
 
+  const sizeClass = `size-${widget.size ?? 'md'}`
+
   return (
     <>
-      <div className="widget-card">
+      <div className={`widget-card ${sizeClass}`}>
         <div className="widget-card-header" onClick={() => setCollapsed((c) => !c)}>
           <span style={{ fontSize: '10px', color: 'var(--text-muted)', minWidth: '10px' }}>
             {collapsed ? '▶' : '▼'}
@@ -186,8 +239,18 @@ export function WidgetPanel({ width }: { width: number }) {
   const { widgets, loading, addWidget } = useWidgetStore()
   const { sendMessage } = useGatewayStore()
   const [showNew, setShowNew] = useState(false)
+  const [showPicker, setShowPicker] = useState(false)
 
   const handleAskAgent = () => sendMessage(WIDGET_PROMPT)
+
+  const handleAddPreset = async (preset: PresetDef) => {
+    await addWidget({
+      title: preset.title,
+      description: preset.description,
+      code: preset.code,
+      size: preset.size,
+    })
+  }
 
   return (
     <div className="widget-panel" style={{ width, minWidth: width, maxWidth: width }}>
@@ -196,6 +259,14 @@ export function WidgetPanel({ width }: { width: number }) {
           Widgets {loading && <span style={{ fontSize: '10px', opacity: 0.5 }}>⟳</span>}
         </span>
         <div style={{ display: 'flex', gap: '4px' }}>
+          <button
+            className="btn btn-ghost"
+            style={{ padding: '3px 8px', fontSize: '11px' }}
+            onClick={() => setShowPicker(true)}
+            title="Browse built-in widgets"
+          >
+            📦 Library
+          </button>
           <button
             className="btn btn-ghost"
             style={{ padding: '3px 8px', fontSize: '11px' }}
@@ -210,19 +281,19 @@ export function WidgetPanel({ width }: { width: number }) {
             onClick={handleAskAgent}
             title="Ask the AI agent to create a widget"
           >
-            🤖 Ask AI
+            🤖 AI
           </button>
         </div>
       </div>
 
       <div className="widget-grid">
         {!loading && widgets.length === 0 && (
-          <div className="empty-state" style={{ minHeight: '140px' }}>
+          <div className="empty-state" style={{ minHeight: '140px', gridColumn: '1 / -1' }}>
             <div className="empty-state-icon">📊</div>
             <div>No widgets yet</div>
             <div style={{ fontSize: '11px', color: 'var(--text-muted)', textAlign: 'center' }}>
-              Click <strong>🤖 Ask AI</strong> to have the agent create one,<br />
-              or <strong>+ New</strong> to write one yourself.
+              Click <strong>📦 Library</strong> for built-in widgets,<br />
+              <strong>🤖 AI</strong> to generate one, or <strong>+ New</strong> to write your own.
             </div>
           </div>
         )}
@@ -240,6 +311,13 @@ export function WidgetPanel({ width }: { width: number }) {
             await addWidget(data as Parameters<typeof addWidget>[0])
             setShowNew(false)
           }}
+        />
+      )}
+
+      {showPicker && (
+        <WidgetPickerModal
+          onAdd={handleAddPreset}
+          onClose={() => setShowPicker(false)}
         />
       )}
     </div>
