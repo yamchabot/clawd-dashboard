@@ -218,22 +218,46 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
 }
 
 // ── Widget Panel ──────────────────────────────────────────────────────────────
-const WIDGET_PROMPT = [
-  'Please create a new dashboard widget for me.',
-  'Respond with a JSON widget block like this:',
-  '```widget',
-  '{"title":"Widget Name","description":"What it shows","size":"md","code":"function Widget() { return React.createElement(\'div\', null, \'Hello!\'); }"}',
-  '```',
-  'Widget code rules:',
-  '- Define a function named Widget()',
-  '- Use React.createElement() — no JSX',
-  '- Available globals: React, useState, useEffect, useMemo, useCallback, useRef, fetch, exec(cmd)',
-  '- exec(cmd) runs a shell command in the sandbox → Promise<{stdout, stderr, exitCode}>',
-  '- Use CSS variables: var(--text-primary), var(--bg-surface), var(--accent), var(--mono), etc.',
-  '- For graphs, use SVG elements — no external chart libraries needed',
-  '- For polling data, use setInterval inside useEffect and clear on cleanup',
-  'What kind of widget would you like?',
-].join('\n')
+// Sent when the user clicks "🤖 AI" — briefs the agent on the widget system
+// without commanding it to create anything immediately.
+const WIDGET_CONTEXT_PROMPT = `
+The user is on the widget panel of the clawd-dashboard and may want to add a new widget. Here's a full briefing on how the widget system works so you can help them when they describe what they want.
+
+**What is a widget?**
+Each widget is a small JavaScript component that runs live in the dashboard. Widgets are stored server-side in \`widgets.json\` and hot-reloaded automatically. Users can add, edit, reorder, and delete them. Widgets are displayed in a CSS grid — narrow ones take one column, wide ones span the full row.
+
+**How to deliver a widget**
+When the user asks you to create or modify a widget, respond with a \`\`\`widget code block containing JSON:
+\`\`\`widget
+{"title":"Widget Name","description":"What it shows","size":"md","code":"function Widget() { ... }"}
+\`\`\`
+The dashboard will auto-detect this block and install/update the widget immediately.
+
+**JSON fields:**
+- \`title\` — display name (required)
+- \`description\` — one-line description shown on hover (optional)
+- \`size\` — layout hint: \`"sm"\` or \`"md"\` = one column (default), \`"lg"\` or \`"xl"\` = full row
+- \`id\` — include this only when *updating* an existing widget (omit for new ones)
+- \`code\` — the widget JavaScript (see rules below)
+
+**Widget code rules:**
+- Define a function named \`Widget()\` that returns \`React.createElement(...)\`
+- **No JSX** — the code runs directly via \`new Function()\`, no transpilation
+- Available globals (injected automatically): \`React\`, \`useState\`, \`useEffect\`, \`useMemo\`, \`useCallback\`, \`useRef\`, \`fetch\`, \`exec(cmd)\`, \`console\`
+- \`exec(cmd)\` runs a shell command in the sandbox → \`Promise<{stdout, stderr, exitCode}>\`
+- Use CSS variables for theming (they match the dark dashboard palette): \`var(--text-primary)\`, \`var(--text-secondary)\`, \`var(--text-muted)\`, \`var(--bg-surface)\`, \`var(--bg-elevated)\`, \`var(--accent)\`, \`var(--accent-bright)\`, \`var(--accent-dim)\`, \`var(--accent-glow)\`, \`var(--border)\`, \`var(--border-light)\`, \`var(--mono)\`, \`var(--green)\`, \`var(--red)\`, \`var(--yellow)\`, \`var(--blue)\`, \`var(--cyan)\`
+- For charts/graphs, use inline SVG — no external libraries are available
+- For live/polling data, use \`setInterval\` inside \`useEffect\` and always clear on cleanup
+- For persistent state across page reloads, use \`localStorage\`
+- Keep widgets self-contained — no imports, no external scripts
+
+**Example (minimal):**
+\`\`\`widget
+{"title":"Hello","size":"sm","code":"function Widget() { return React.createElement('div', {style:{padding:'8px',color:'var(--accent-bright)'}}, 'Hello, dashboard!'); }"}
+\`\`\`
+
+What kind of widget would you like to add?
+`.trim()
 
 export function WidgetPanel({ width }: { width: number }) {
   const { widgets, loading, addWidget } = useWidgetStore()
@@ -241,7 +265,7 @@ export function WidgetPanel({ width }: { width: number }) {
   const [showNew, setShowNew] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
 
-  const handleAskAgent = () => sendMessage(WIDGET_PROMPT)
+  const handleAskAgent = () => sendMessage(WIDGET_CONTEXT_PROMPT)
 
   const handleAddPreset = async (preset: PresetDef) => {
     await addWidget({
