@@ -2,15 +2,12 @@
   "version": 1,
   "widgets": [
     {
-      "id": "clock-builtin",
-      "title": "Clock",
-      "description": "Current time",
+      "id": "test",
+      "title": "Test",
+      "code": "function Widget(){}",
       "size": "sm",
-      "order": 0,
-      "enabled": true,
-      "createdAt": 0,
-      "updatedAt": 0,
-      "code": "function Widget() {\n  const [time, setTime] = React.useState(new Date());\n  useEffect(() => {\n    const t = setInterval(() => setTime(new Date()), 1000);\n    return () => clearInterval(t);\n  }, []);\n  return React.createElement('div', {\n    style: { textAlign: 'center', padding: '8px' }\n  },\n    React.createElement('div', {\n      style: { fontSize: '32px', fontWeight: 700, fontFamily: 'var(--mono)', color: 'var(--accent-bright)', letterSpacing: '2px' }\n    }, time.toLocaleTimeString()),\n    React.createElement('div', {\n      style: { fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px' }\n    }, time.toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }))\n  );\n}"
+      "createdAt": 1,
+      "updatedAt": 1
     }
   ]
 }

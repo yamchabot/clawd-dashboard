@@ -17,23 +17,44 @@ const PROXY_PORT = 5175
 const GATEWAY_HOST = 'host.docker.internal'
 const GATEWAY_PORT = 18789
 
+// Headers that must not be forwarded between hops (RFC 7230)
+const HOP_BY_HOP = new Set([
+  'connection', 'keep-alive', 'transfer-encoding',
+  'te', 'trailer', 'upgrade', 'proxy-authorization', 'proxy-authenticate',
+])
+
 function proxyHttp(req, res, targetPort) {
+  // Strip hop-by-hop headers before forwarding — Cloudflare often injects
+  // transfer-encoding: chunked which confuses Node's HTTP client.
+  const headers = {}
+  for (const [k, v] of Object.entries(req.headers)) {
+    if (!HOP_BY_HOP.has(k.toLowerCase())) headers[k] = v
+  }
+  headers['host'] = `localhost:${targetPort}`
+
   const options = {
     hostname: 'localhost',
     port: targetPort,
     path: req.url,
     method: req.method,
-    headers: { ...req.headers, host: `localhost:${targetPort}` },
+    headers,
   }
   const proxy = http.request(options, (proxyRes) => {
-    res.writeHead(proxyRes.statusCode, proxyRes.headers)
-    proxyRes.pipe(res)
+    // Strip hop-by-hop from response too
+    const respHeaders = {}
+    for (const [k, v] of Object.entries(proxyRes.headers)) {
+      if (!HOP_BY_HOP.has(k.toLowerCase())) respHeaders[k] = v
+    }
+    res.writeHead(proxyRes.statusCode, respHeaders)
+    proxyRes.pipe(res, { end: true })
+    proxyRes.on('error', () => res.destroy())
   })
   proxy.on('error', (e) => {
-    res.writeHead(502)
-    res.end(`Proxy error: ${e.message}`)
+    if (!res.headersSent) { res.writeHead(502); res.end(`Proxy error: ${e.message}`) }
+    else res.destroy()
   })
-  req.pipe(proxy)
+  req.on('error', () => proxy.destroy())
+  req.pipe(proxy, { end: true })
 }
 
 function tunnelWs(clientSocket, targetHost, targetPort, reqHeaders) {
@@ -81,6 +102,14 @@ function rawTcpTunnel(clientSocket, targetHost, targetPort, headData) {
   clientSocket.on('close', () => target.destroy())
 }
 
+// ── Global crash guards ───────────────────────────────────────────────────────
+process.on('uncaughtException', (err) => {
+  console.error('[proxy] Uncaught exception (kept alive):', err.message)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[proxy] Unhandled rejection (kept alive):', reason)
+})
+
 const server = createServer((req, res) => {
   proxyHttp(req, res, VITE_PORT)
 })
@@ -103,6 +132,8 @@ server.on('upgrade', (req, socket, head) => {
     rawTcpTunnel(socket, 'localhost', VITE_PORT, buf)
   }
 })
+
+server.on('error', (err) => console.error('[proxy] HTTP server error:', err.message))
 
 server.listen(PROXY_PORT, '0.0.0.0', () => {
   console.log(`\n🐉 Clawd proxy running on port ${PROXY_PORT}`)

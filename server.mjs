@@ -18,8 +18,8 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DIST = path.join(__dirname, 'dist')
-const WIDGETS_FILE = path.join(__dirname, 'widgets.json')
-const PORT = 5174
+const WIDGETS_FILE = process.env.WIDGETS_FILE ?? path.join(__dirname, 'widgets.json')
+const PORT = parseInt(process.env.PORT || '5174', 10)
 const GATEWAY_HOST = process.env.GATEWAY_HOST || 'host.docker.internal'
 const GATEWAY_PORT = parseInt(process.env.GATEWAY_PORT || '18789')
 
@@ -37,6 +37,12 @@ const sseClients = new Set()
 function broadcastWidgetsChanged() {
   const msg = `data: ${JSON.stringify({ type: 'widgets-changed', ts: Date.now() })}\n\n`
   for (const res of sseClients) {
+    // Guard against destroyed/closed sockets — res.write() failure is async (error event),
+    // not a thrown exception, so try/catch alone is not enough and would crash the server.
+    if (res.destroyed || res.writableEnded) {
+      sseClients.delete(res)
+      continue
+    }
     try { res.write(msg) } catch { sseClients.delete(res) }
   }
 }
@@ -115,6 +121,8 @@ function handleApi(req, res) {
     res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`)
     sseClients.add(res)
     req.on('close', () => sseClients.delete(res))
+    res.on('error', () => sseClients.delete(res))
+    res.socket?.on('error', () => sseClients.delete(res))
     return
   }
 
@@ -238,6 +246,17 @@ server.on('upgrade', (req, clientSocket, head) => {
   })
 
   proxyReq.end()
+})
+
+// ── Global error guards ───────────────────────────────────────────────────────
+process.on('uncaughtException', (err) => {
+  console.error('[server] Uncaught exception (kept alive):', err.message)
+})
+process.on('unhandledRejection', (reason) => {
+  console.error('[server] Unhandled rejection (kept alive):', reason)
+})
+server.on('error', (err) => {
+  console.error('[server] HTTP server error:', err.message)
 })
 
 server.listen(PORT, '0.0.0.0', () => {
