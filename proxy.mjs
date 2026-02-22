@@ -134,9 +134,27 @@ const server = createServer((req, res) => {
 
 server.on('upgrade', (req, socket, head) => {
   const isGateway = req.url === '/ws' || req.url?.startsWith('/ws?') || req.url?.startsWith('/ws/')
+
+  // Build forwarded headers — strip hop-by-hop EXCEPT the ones WebSocket needs
+  const WS_PRESERVE = new Set(['connection', 'upgrade'])
+  const fwdHeaders = {}
+  for (const [k, v] of Object.entries(req.headers)) {
+    const lk = k.toLowerCase()
+    if (!HOP_BY_HOP.has(lk) || WS_PRESERVE.has(lk)) fwdHeaders[k] = v
+  }
+  fwdHeaders['host'] = isGateway ? `${GATEWAY_HOST}:${GATEWAY_PORT}` : `localhost:${VITE_PORT}`
+
+  if (isGateway) {
+    // The gateway validates Origin against its allowedOrigins list.
+    // Default allowed origins are localhost variants (where its own dashboard
+    // is served). Rewrite to localhost so it passes the check regardless of
+    // which Cloudflare tunnel URL is in use.
+    fwdHeaders['origin'] = `http://localhost:${GATEWAY_PORT}`
+  }
+
   const buf = Buffer.concat([Buffer.from(
     `GET ${isGateway ? '/' : req.url} HTTP/1.1\r\n` +
-    Object.entries({ ...req.headers, host: isGateway ? `${GATEWAY_HOST}:${GATEWAY_PORT}` : `localhost:${VITE_PORT}` })
+    Object.entries(fwdHeaders)
       .map(([k, v]) => `${k}: ${v}`)
       .join('\r\n') +
     '\r\n\r\n'
