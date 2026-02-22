@@ -197,16 +197,34 @@ body {
   overflow: hidden;
 }
 
-/* Widget panel */
+/* Widget panel — width is set via inline style from App.tsx */
 .widget-panel {
   display: flex;
   flex-direction: column;
-  width: 340px;
-  min-width: 260px;
-  border-right: 1px solid var(--border);
   background: var(--bg-surface);
   overflow: hidden;
   flex-shrink: 0;
+}
+
+/* Drag handle between widget panel and chat panel */
+.panel-resizer {
+  width: 5px;
+  flex-shrink: 0;
+  background: var(--border);
+  cursor: col-resize;
+  transition: background 0.15s;
+  position: relative;
+}
+
+.panel-resizer:hover,
+.panel-resizer:active {
+  background: var(--accent-dim);
+}
+
+.panel-resizer::after {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;  /* widen the hit area to 13px without affecting layout */
 }
 
 .widget-panel-header {

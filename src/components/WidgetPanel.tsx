@@ -82,7 +82,7 @@ function Widget() {
   },
 ]
 
-export function WidgetPanel() {
+export function WidgetPanel({ width }: { width: number }) {
   const { widgets } = useWidgetStore()
   const { sendMessage } = useGatewayStore()
 
@@ -101,7 +101,7 @@ export function WidgetPanel() {
   }
 
   return (
-    <div className="widget-panel">
+    <div className="widget-panel" style={{ width, minWidth: width, maxWidth: width }}>
       <div className="widget-panel-header">
         <span className="widget-panel-title">Widgets</span>
         <button
