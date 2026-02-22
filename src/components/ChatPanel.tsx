@@ -5,43 +5,55 @@ import { useGatewayStore } from '../store/gateway'
 import { useWidgetStore } from '../store/widgets'
 import type { ChatMessage } from '../gateway/types'
 
-function parseWidgetBlocks(text: string): { widget?: { title: string; code: string }; text: string } {
+interface WidgetBlock {
+  id?: string
+  title: string
+  description?: string
+  code: string
+  size?: 'sm' | 'md' | 'lg' | 'xl'
+}
+
+function parseWidgetBlocks(text: string): { widgets: WidgetBlock[]; text: string } {
   const widgetRegex = /```widget\s*\n([\s\S]*?)\n```/g
   let match
-  let widget
+  const widgets: WidgetBlock[] = []
   let cleanText = text
 
   while ((match = widgetRegex.exec(text)) !== null) {
     try {
       const parsed = JSON.parse(match[1])
       if (parsed.title && parsed.code) {
-        widget = parsed
-        cleanText = cleanText.replace(match[0], `*[Widget created: **${parsed.title}**]*`)
+        widgets.push(parsed)
+        cleanText = cleanText.replace(
+          match[0],
+          `*[Widget ${parsed.id ? 'updated' : 'created'}: **${parsed.title}**]*`,
+        )
       }
-    } catch {
-      // not valid JSON, skip
-    }
+    } catch { /* not valid JSON */ }
   }
 
-  return { widget, text: cleanText }
+  return { widgets, text: cleanText }
 }
 
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const { addWidget, updateWidget, widgets } = useWidgetStore()
   const [widgetHandled, setWidgetHandled] = useState(false)
 
-  // Parse widget blocks from assistant messages
+  // Parse widget blocks from completed assistant messages and write to server
   useEffect(() => {
     if (msg.role !== 'assistant' || msg.partial || widgetHandled) return
-    const { widget } = parseWidgetBlocks(msg.content)
-    if (widget) {
-      setWidgetHandled(true)
-      // Check if widget with same title exists
-      const existing = widgets.find((w) => w.title === widget.title)
+    const { widgets: blocks } = parseWidgetBlocks(msg.content)
+    if (blocks.length === 0) return
+    setWidgetHandled(true)
+    for (const block of blocks) {
+      // If the block has an id, try to update existing widget; otherwise add or match by title
+      const byId = block.id ? widgets.find((w) => w.id === block.id) : undefined
+      const byTitle = widgets.find((w) => w.title === block.title)
+      const existing = byId ?? byTitle
       if (existing) {
-        updateWidget(existing.id, { code: widget.code })
+        updateWidget(existing.id, { code: block.code, title: block.title, description: block.description, size: block.size })
       } else {
-        addWidget({ title: widget.title, code: widget.code, size: 'md' })
+        addWidget({ title: block.title, description: block.description, code: block.code, size: block.size ?? 'md' })
       }
     }
   }, [msg.content, msg.partial, msg.role])

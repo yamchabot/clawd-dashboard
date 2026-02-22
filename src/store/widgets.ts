@@ -1,79 +1,165 @@
+/**
+ * Widget store backed by widgets.json on the server.
+ *
+ * - Loads from GET /api/widgets on init
+ * - Subscribes to GET /api/widgets/events (SSE) for instant updates
+ * - Falls back to polling every 5s if SSE fails
+ * - Writes via PUT /api/widgets
+ */
+
 import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
 
 export interface WidgetDef {
   id: string
   title: string
-  code: string       // React component code as string
+  description?: string
+  code: string         // React component as a string
+  size?: 'sm' | 'md' | 'lg' | 'xl'
+  order?: number
+  enabled?: boolean
   createdAt: number
   updatedAt: number
-  size?: 'sm' | 'md' | 'lg' | 'xl'
-  pinned?: boolean
+}
+
+export interface WidgetsFile {
+  version: number
+  widgets: WidgetDef[]
 }
 
 interface WidgetStore {
   widgets: WidgetDef[]
-  addWidget: (def: Omit<WidgetDef, 'id' | 'createdAt' | 'updatedAt'>) => string
-  updateWidget: (id: string, updates: Partial<WidgetDef>) => void
-  removeWidget: (id: string) => void
-  setWidgets: (widgets: WidgetDef[]) => void
+  loading: boolean
+  lastSaved: number
+
+  // Internal
+  _setWidgets: (widgets: WidgetDef[]) => void
+
+  // Public API
+  refresh: () => Promise<void>
+  saveAll: (widgets: WidgetDef[]) => Promise<void>
+  addWidget: (def: Omit<WidgetDef, 'id' | 'createdAt' | 'updatedAt'>) => Promise<string>
+  updateWidget: (id: string, updates: Partial<Omit<WidgetDef, 'id'>>) => Promise<void>
+  removeWidget: (id: string) => Promise<void>
 }
 
-const STORAGE_KEY = 'clawd-dashboard:widgets'
-
-function loadWidgets(): WidgetDef[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) return JSON.parse(raw)
-  } catch {}
-  return []
+async function fetchWidgets(): Promise<WidgetDef[]> {
+  const res = await fetch('/api/widgets')
+  if (!res.ok) throw new Error(`GET /api/widgets → ${res.status}`)
+  const data: WidgetsFile = await res.json()
+  return (data.widgets ?? []).filter((w) => w.enabled !== false)
 }
 
-function saveWidgets(widgets: WidgetDef[]) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(widgets))
-  } catch {}
+async function putWidgets(widgets: WidgetDef[]): Promise<void> {
+  const res = await fetch('/api/widgets', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ version: 1, widgets }),
+  })
+  if (!res.ok) throw new Error(`PUT /api/widgets → ${res.status}`)
 }
 
 export const useWidgetStore = create<WidgetStore>((set, get) => ({
-  widgets: loadWidgets(),
+  widgets: [],
+  loading: true,
+  lastSaved: 0,
 
-  addWidget: (def) => {
+  _setWidgets: (widgets) => set({ widgets, loading: false }),
+
+  refresh: async () => {
+    try {
+      const widgets = await fetchWidgets()
+      set({ widgets, loading: false })
+    } catch (e) {
+      console.warn('[widgets] refresh failed:', e)
+      set({ loading: false })
+    }
+  },
+
+  saveAll: async (widgets) => {
+    // Sort by order field before saving
+    const sorted = [...widgets].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    await putWidgets(sorted)
+    set({ widgets: sorted, lastSaved: Date.now() })
+  },
+
+  addWidget: async (def) => {
     const id = uuidv4()
-    const widget: WidgetDef = {
+    const now = Date.now()
+    const existing = get().widgets
+    const newWidget: WidgetDef = {
       ...def,
       id,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      enabled: true,
+      order: existing.length,
+      createdAt: now,
+      updatedAt: now,
     }
-    set((state) => {
-      const widgets = [...state.widgets, widget]
-      saveWidgets(widgets)
-      return { widgets }
-    })
+    const updated = [...existing, newWidget]
+    await putWidgets(updated)
+    set({ widgets: updated })
     return id
   },
 
-  updateWidget: (id, updates) => {
-    set((state) => {
-      const widgets = state.widgets.map((w) =>
-        w.id === id ? { ...w, ...updates, updatedAt: Date.now() } : w,
-      )
-      saveWidgets(widgets)
-      return { widgets }
-    })
+  updateWidget: async (id, updates) => {
+    const updated = get().widgets.map((w) =>
+      w.id === id ? { ...w, ...updates, updatedAt: Date.now() } : w,
+    )
+    await putWidgets(updated)
+    set({ widgets: updated })
   },
 
-  removeWidget: (id) => {
-    set((state) => {
-      const widgets = state.widgets.filter((w) => w.id !== id)
-      saveWidgets(widgets)
-      return { widgets }
-    })
-  },
-
-  setWidgets: (widgets) => {
-    saveWidgets(widgets)
-    set({ widgets })
+  removeWidget: async (id) => {
+    const updated = get().widgets.filter((w) => w.id !== id)
+    await putWidgets(updated)
+    set({ widgets: updated })
   },
 }))
+
+// ── Bootstrap: load + subscribe ───────────────────────────────────────────────
+let sseConn: EventSource | null = null
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+export function initWidgetSync() {
+  const store = useWidgetStore.getState()
+
+  // Initial load
+  store.refresh()
+
+  // Try SSE first
+  function connectSSE() {
+    if (sseConn) { try { sseConn.close() } catch {} }
+    const es = new EventSource('/api/widgets/events')
+    sseConn = es
+
+    es.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data)
+        if (msg.type === 'widgets-changed') {
+          useWidgetStore.getState().refresh()
+        }
+      } catch {}
+    }
+
+    es.onerror = () => {
+      es.close()
+      sseConn = null
+      // Fall back to polling
+      startPolling()
+    }
+  }
+
+  function startPolling() {
+    if (pollTimer) return
+    console.log('[widgets] SSE unavailable, falling back to polling every 5s')
+    pollTimer = setInterval(() => {
+      useWidgetStore.getState().refresh()
+    }, 5000)
+  }
+
+  if (typeof EventSource !== 'undefined') {
+    connectSSE()
+  } else {
+    startPolling()
+  }
+}
