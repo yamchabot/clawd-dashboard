@@ -10,6 +10,7 @@
 
 import http from 'http'
 import net from 'net'
+import tls from 'tls'
 import { createServer } from 'http'
 
 const VITE_PORT = 5174
@@ -84,17 +85,34 @@ function tunnelWs(clientSocket, targetHost, targetPort, reqHeaders) {
   clientSocket.on('close', () => target.destroy())
 }
 
-// Better approach: raw TCP tunnel preserving full HTTP upgrade
+// Raw TCP tunnel preserving full HTTP upgrade (for plain ws://)
 function rawTcpTunnel(clientSocket, targetHost, targetPort, headData) {
   const target = net.connect(targetPort, targetHost, () => {
     target.write(headData)
   })
-
   target.on('error', (e) => {
     console.error(`[proxy] TCP tunnel error ${targetHost}:${targetPort}:`, e.message)
     clientSocket.end()
   })
+  clientSocket.pipe(target)
+  target.pipe(clientSocket)
+  clientSocket.on('error', () => target.destroy())
+  target.on('close', () => clientSocket.end())
+  clientSocket.on('close', () => target.destroy())
+}
 
+// TLS tunnel for wss:// gateway — wraps the socket in TLS, then sends the HTTP upgrade
+function rawTlsTunnel(clientSocket, targetHost, targetPort, headData) {
+  const target = tls.connect(
+    { host: targetHost, port: targetPort, rejectUnauthorized: false },
+    () => {
+      target.write(headData)
+    },
+  )
+  target.on('error', (e) => {
+    console.error(`[proxy] TLS tunnel error ${targetHost}:${targetPort}:`, e.message)
+    clientSocket.end()
+  })
   clientSocket.pipe(target)
   target.pipe(clientSocket)
   clientSocket.on('error', () => target.destroy())
@@ -125,8 +143,8 @@ server.on('upgrade', (req, socket, head) => {
   ), head])
 
   if (isGateway) {
-    console.log(`[proxy] WS upgrade → gateway ${GATEWAY_HOST}:${GATEWAY_PORT}`)
-    rawTcpTunnel(socket, GATEWAY_HOST, GATEWAY_PORT, buf)
+    console.log(`[proxy] WS upgrade → gateway ${GATEWAY_HOST}:${GATEWAY_PORT} (TLS)`)
+    rawTlsTunnel(socket, GATEWAY_HOST, GATEWAY_PORT, buf)
   } else {
     console.log(`[proxy] WS upgrade → Vite HMR`)
     rawTcpTunnel(socket, 'localhost', VITE_PORT, buf)
