@@ -315,7 +315,9 @@ body {
 .widget-card:hover { border-color: var(--border-light); }
 
 /* Drag-to-reorder states */
-.widget-card.dragging { opacity: 0.35; pointer-events: none; }
+/* NOTE: no pointer-events:none — applying it during dragstart confuses Chromium
+   and breaks the entire drag gesture. Opacity alone is safe. */
+.widget-card.dragging { opacity: 0.35; }
 .widget-card-header { cursor: grab; }
 .widget-card-header:active { cursor: grabbing; }
 

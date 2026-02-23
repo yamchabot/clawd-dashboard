@@ -364,34 +364,39 @@ export function WidgetPanel({ width }: { width: number }) {
   const [showPicker, setShowPicker] = useState(false)
 
   // ── Drag-to-reorder state (panel-level) ────────────────────────────────────
-  // draggingId   — which widget is currently being dragged
-  // insertBeforeId — which widget id to insert before; null = append to end
+  // draggingId state  — used for rendering (isDragging prop, end-zone visibility)
+  // draggingIdRef     — used in ALL handler logic to avoid stale closures
+  //                     (dragover fires before React has re-rendered after dragstart)
+  // insertBeforeId state — used for rendering (insert-before highlight)
+  // insertBeforeRef   — used in handleDrop to avoid stale closure
   const [draggingId, setDraggingId] = useState<string | null>(null)
+  const draggingIdRef = useRef<string | null>(null)
   const [insertBeforeId, setInsertBeforeId] = useState<string | null>(null)
-  // Ref mirrors insertBeforeId to avoid stale closure in dragover (fires 30+/s)
   const insertBeforeRef = useRef<string | null>(null)
 
   const handleDragStart = (id: string) => {
+    draggingIdRef.current = id
     setDraggingId(id)
-    setInsertBeforeId(null)
     insertBeforeRef.current = null
+    setInsertBeforeId(null)
   }
 
   const handleDragEnd = () => {
+    draggingIdRef.current = null
     setDraggingId(null)
-    setInsertBeforeId(null)
     insertBeforeRef.current = null
+    setInsertBeforeId(null)
   }
 
   /**
    * Called when the mouse moves over a widget card during a drag.
-   * Determines insert position by comparing mouse Y to the card's vertical midpoint:
-   *   top half → insert before this card
-   *   bottom half → insert before the NEXT card (= after this one)
+   * Uses draggingIdRef (not state) to avoid stale closure — dragover fires
+   * immediately after dragstart, before React has flushed the state update.
    */
   const handleDragOverCard = (targetId: string, e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
-    if (!draggingId || targetId === draggingId) return
+    const dragId = draggingIdRef.current
+    if (!dragId || targetId === dragId) return
 
     const rect = e.currentTarget.getBoundingClientRect()
     const isTopHalf = e.clientY < rect.top + rect.height / 2
@@ -400,14 +405,12 @@ export function WidgetPanel({ width }: { width: number }) {
     if (isTopHalf) {
       newInsert = targetId
     } else {
-      // Insert after targetId = insert before the next widget in the list
       const targetIdx = widgets.findIndex((w) => w.id === targetId)
       const next = widgets[targetIdx + 1]
       newInsert = next ? next.id : null // null = append to end
     }
 
-    // Skip if hovering over the dragged card's own natural insert slot (no-op)
-    if (newInsert === draggingId) return
+    if (newInsert === dragId) return
 
     if (newInsert !== insertBeforeRef.current) {
       insertBeforeRef.current = newInsert
@@ -424,19 +427,19 @@ export function WidgetPanel({ width }: { width: number }) {
     }
   }
 
-  /** Executes the reorder on drop. */
+  /** Executes the reorder on drop. Uses refs (not state) to avoid stale closures. */
   const handleDrop = () => {
-    if (!draggingId) return
+    const dragId = draggingIdRef.current
+    if (!dragId) return
 
     const list = [...widgets]
-    const fromIdx = list.findIndex((w) => w.id === draggingId)
+    const fromIdx = list.findIndex((w) => w.id === dragId)
     if (fromIdx === -1) { handleDragEnd(); return }
 
     const [item] = list.splice(fromIdx, 1)
 
     const target = insertBeforeRef.current
     if (target === null) {
-      // Append to end
       list.push(item)
     } else {
       const toIdx = list.findIndex((w) => w.id === target)
