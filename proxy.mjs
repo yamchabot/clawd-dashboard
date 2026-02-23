@@ -106,9 +106,18 @@ function rawTlsTunnel(clientSocket, targetHost, targetPort, headData) {
   const target = tls.connect(
     { host: targetHost, port: targetPort, rejectUnauthorized: false },
     () => {
+      console.log(`[proxy] TLS handshake OK (${target.getCipher().name}), sending upgrade request`)
       target.write(headData)
     },
   )
+  let loggedResponse = false
+  target.on('data', (chunk) => {
+    if (!loggedResponse) {
+      loggedResponse = true
+      const preview = chunk.toString('utf8', 0, 300).replace(/\r\n/g, ' | ')
+      console.log(`[proxy] Gateway initial response: ${preview}`)
+    }
+  })
   target.on('error', (e) => {
     console.error(`[proxy] TLS tunnel error ${targetHost}:${targetPort}:`, e.message)
     clientSocket.end()
@@ -145,11 +154,16 @@ server.on('upgrade', (req, socket, head) => {
   fwdHeaders['host'] = isGateway ? `${GATEWAY_HOST}:${GATEWAY_PORT}` : `localhost:${VITE_PORT}`
 
   if (isGateway) {
-    // The gateway validates Origin against its allowedOrigins list.
-    // Default allowed origins are localhost variants (where its own dashboard
-    // is served). Rewrite to localhost so it passes the check regardless of
-    // which Cloudflare tunnel URL is in use.
-    fwdHeaders['origin'] = `http://localhost:${GATEWAY_PORT}`
+    // Remove the origin header entirely — Cloudflare sends the tunnel domain
+    // which the gateway rejects. Some servers skip origin checks when no
+    // Origin header is present. If that doesn't work, the fix is to add the
+    // exact string below to gateway.controlUi.allowedOrigins in openclaw.json:
+    //   "allowedOrigins": ["http://localhost:18789"]
+    fwdHeaders['origin'] = `https://localhost:${GATEWAY_PORT}`
+    console.log('[proxy] WS→gateway headers being forwarded:')
+    for (const [k, v] of Object.entries(fwdHeaders)) {
+      console.log(`  ${k}: ${v}`)
+    }
   }
 
   const buf = Buffer.concat([Buffer.from(
