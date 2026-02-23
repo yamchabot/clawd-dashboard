@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { useWidgetStore, type WidgetDef } from '../store/widgets'
 import { useGatewayStore } from '../store/gateway'
 import { WidgetRunner } from './WidgetRunner'
@@ -17,7 +17,6 @@ function WidgetEditModal({
   const [title, setTitle] = useState(widget.title ?? '')
   const [description, setDescription] = useState(widget.description ?? '')
   const [code, setCode] = useState(widget.code ?? '')
-  const [size, setSize] = useState<WidgetDef['size']>(widget.size ?? 'md')
 
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -34,27 +33,6 @@ function WidgetEditModal({
         <div className="form-field">
           <label className="form-label">Description (optional)</label>
           <input className="form-input" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="What does this widget show?" />
-        </div>
-
-        <div className="form-field">
-          <label className="form-label">Size</label>
-          <div style={{ display: 'flex', gap: '8px' }}>
-            {(['sm', 'md', 'lg', 'xl'] as const).map((s) => (
-              <button
-                key={s}
-                onClick={() => setSize(s)}
-                style={{
-                  padding: '4px 12px', borderRadius: '4px', fontSize: '12px',
-                  border: `1px solid ${size === s ? 'var(--accent)' : 'var(--border)'}`,
-                  background: size === s ? 'var(--accent-dim)' : 'var(--bg-elevated)',
-                  color: size === s ? 'var(--accent-bright)' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                }}
-              >
-                {s.toUpperCase()}
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="form-field">
@@ -81,7 +59,7 @@ function WidgetEditModal({
           <button
             className="btn btn-primary"
             disabled={!title.trim() || !code.trim()}
-            onClick={() => onSave({ title: title.trim(), description: description.trim(), code, size })}
+            onClick={() => onSave({ title: title.trim(), description: description.trim(), code })}
           >
             Save Widget
           </button>
@@ -141,8 +119,10 @@ function WidgetPickerModal({
   )
 }
 
-// 160px columns + 8px gap → one cell = 168px
-const CELL_PX = 168
+// 80px cells + 8px gap → one cell = 88px
+const CELL = 88
+const DEFAULT_COLS = 2
+const DEFAULT_ROWS = 2
 
 // ── Widget Card ───────────────────────────────────────────────────────────────
 function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number; total: number }) {
@@ -151,25 +131,30 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
   const [collapsed, setCollapsed] = useState(false)
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
-  const [dragSpan, setDragSpan] = useState<number | null>(null)
+  const [dragSpan, setDragSpan] = useState<{ col: number; row: number } | null>(null)
 
-  const colSpan = dragSpan ?? widget.colSpan ?? 1
+  const colSpan = dragSpan?.col ?? widget.colSpan ?? DEFAULT_COLS
+  const rowSpan = dragSpan?.row ?? widget.rowSpan ?? DEFAULT_ROWS
 
   const onResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
     const startX = e.clientX
-    const startSpan = widget.colSpan ?? 1
-    let current = startSpan
+    const startY = e.clientY
+    const startCol = widget.colSpan ?? DEFAULT_COLS
+    const startRow = widget.rowSpan ?? DEFAULT_ROWS
+    let curCol = startCol
+    let curRow = startRow
 
     const onMove = (ev: MouseEvent) => {
-      const delta = ev.clientX - startX
-      const next = Math.max(1, Math.round(startSpan + delta / CELL_PX))
-      current = next
-      setDragSpan(next)
+      const nextCol = Math.max(1, Math.round(startCol + (ev.clientX - startX) / CELL))
+      const nextRow = Math.max(1, Math.round(startRow + (ev.clientY - startY) / CELL))
+      curCol = nextCol
+      curRow = nextRow
+      setDragSpan({ col: nextCol, row: nextRow })
     }
     const onUp = () => {
-      updateWidget(widget.id, { colSpan: current })
+      updateWidget(widget.id, { colSpan: curCol, rowSpan: curRow })
       setDragSpan(null)
       window.removeEventListener('mousemove', onMove)
       window.removeEventListener('mouseup', onUp)
@@ -203,7 +188,7 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
     <>
       <div
         className="widget-card"
-        style={{ gridColumn: `span ${colSpan}` }}
+        style={{ gridColumn: `span ${colSpan}`, gridRow: `span ${rowSpan}` }}
       >
         <div className="widget-card-header" onClick={() => setCollapsed((c) => !c)}>
           <span style={{ fontSize: '10px', color: 'var(--text-muted)', minWidth: '10px' }}>
@@ -236,7 +221,7 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
         <div
           className="widget-resize-handle"
           onMouseDown={onResizeStart}
-          title={`${colSpan} column${colSpan !== 1 ? 's' : ''} wide — drag to resize`}
+          title={`${colSpan}×${rowSpan} — drag to resize`}
         />
       </div>
 

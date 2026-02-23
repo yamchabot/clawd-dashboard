@@ -16,7 +16,8 @@ export interface WidgetDef {
   description?: string
   code: string         // React component as a string
   size?: 'sm' | 'md' | 'lg' | 'xl'
-  colSpan?: number     // grid column span (1 = 160px, 2 = 328px, etc.)
+  colSpan?: number     // grid column span (1 = 80px, 2 = 168px, etc.)
+  rowSpan?: number     // grid row span (1 = 80px, 2 = 168px, etc.)
   order?: number
   enabled?: boolean
   createdAt: number

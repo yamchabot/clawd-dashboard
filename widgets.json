@@ -7,8 +7,9 @@
       "code": "function Widget(){}",
       "size": "sm",
       "createdAt": 1,
-      "updatedAt": 1,
-      "order": 0
+      "updatedAt": 1771807694312,
+      "order": 0,
+      "colSpan": 1
     },
     {
       "title": "Digital Clock",
@@ -19,7 +20,8 @@
       "enabled": true,
       "order": 1,
       "createdAt": 1771768793454,
-      "updatedAt": 1771768793454
+      "updatedAt": 1771807713161,
+      "colSpan": 1
     },
     {
       "title": "Quick Notes",
