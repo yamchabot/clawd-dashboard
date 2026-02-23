@@ -9,14 +9,25 @@ function WidgetEditModal({
   widget,
   onSave,
   onClose,
+  onAskAgent,
 }: {
   widget: Partial<WidgetDef> & { code: string }
   onSave: (data: Partial<WidgetDef>) => void
   onClose: () => void
+  onAskAgent?: (guidance: string, currentCode: string) => void
 }) {
   const [title, setTitle] = useState(widget.title ?? '')
   const [description, setDescription] = useState(widget.description ?? '')
   const [code, setCode] = useState(widget.code ?? '')
+  const [guidance, setGuidance] = useState('')
+  const [sent, setSent] = useState(false)
+
+  const handleAskAgent = () => {
+    if (!guidance.trim() || !onAskAgent) return
+    onAskAgent(guidance.trim(), code)
+    setSent(true)
+    setTimeout(() => onClose(), 800)
+  }
 
   return (
     <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -54,8 +65,39 @@ function WidgetEditModal({
           />
         </div>
 
+        {/* Ask Agent section — only shown when editing an existing widget */}
+        {widget.id && onAskAgent && (
+          <div className="form-field" style={{ borderTop: '1px solid var(--border)', paddingTop: '12px', marginTop: '4px' }}>
+            <label className="form-label">
+              🤖 Ask Agent to Change This Widget
+              <span style={{ marginLeft: '8px', fontSize: '10px', color: 'var(--text-muted)', fontWeight: 400 }}>
+                Describe what you want — the agent will rewrite the code and auto-install it
+              </span>
+            </label>
+            <textarea
+              className="form-input"
+              value={guidance}
+              onChange={(e) => setGuidance(e.target.value)}
+              placeholder="e.g. Add a dark/light theme toggle, show data as a bar chart, poll every 30 seconds instead of 60..."
+              style={{ fontSize: '13px', minHeight: '80px', resize: 'vertical', lineHeight: 1.5 }}
+            />
+          </div>
+        )}
+
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
+
+          {widget.id && onAskAgent && (
+            <button
+              className="btn btn-ghost"
+              disabled={!guidance.trim() || sent}
+              onClick={handleAskAgent}
+              style={{ color: sent ? 'var(--green)' : undefined }}
+            >
+              {sent ? '✓ Sent to Agent' : '🤖 Ask Agent'}
+            </button>
+          )}
+
           <button
             className="btn btn-primary"
             disabled={!title.trim() || !code.trim()}
@@ -125,8 +167,8 @@ const DEFAULT_COLS = 2
 const DEFAULT_ROWS = 2
 
 // ── Widget Card ───────────────────────────────────────────────────────────────
-function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number; total: number }) {
-  const { updateWidget, removeWidget, widgets, saveAll } = useWidgetStore()
+function WidgetCard({ widget, index: _index, total: _total }: { widget: WidgetDef; index: number; total: number }) {
+  const { updateWidget, removeWidget } = useWidgetStore()
   const { sendMessage } = useGatewayStore()
   const [collapsed, setCollapsed] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -163,25 +205,20 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
     window.addEventListener('mouseup', onUp)
   }
 
-  const handleRefresh = () => {
+  /** Sends a structured prompt to the agent to rewrite/update this widget. */
+  const handleAskAgent = (guidance: string, currentCode: string) => {
+    const title = widget.title
+    const id = widget.id
     sendMessage(
-      `Please rewrite the widget titled "${widget.title}". Its current code is:\n\`\`\`js\n${widget.code}\n\`\`\`\n` +
-      `Output an improved version as a JSON widget block:\n\`\`\`widget\n{"id":"${widget.id}","title":"...","code":"..."}\n\`\`\``,
+      `Please update the widget titled "${title}" (id: "${id}").\n\n` +
+      `Current code:\n\`\`\`js\n${currentCode}\n\`\`\`\n\n` +
+      `Changes requested:\n${guidance}\n\n` +
+      `When you're done, respond with a \`\`\`widget block that includes the same \`id\` field ` +
+      `so the dashboard auto-installs the update:\n` +
+      `\`\`\`widget\n{"id":"${id}","title":"${title}","code":"...updated code..."}\n\`\`\`\n\n` +
+      `After writing the code, briefly verify it's error-free by tracing through the logic. ` +
+      `If the widget tests file (\`tests/presets.test.ts\`) could be extended for this widget, mention what test cases you'd add.`
     )
-  }
-
-  const handleMoveUp = () => {
-    if (index === 0) return
-    const reordered = [...widgets]
-    ;[reordered[index - 1], reordered[index]] = [reordered[index], reordered[index - 1]]
-    saveAll(reordered.map((w, i) => ({ ...w, order: i })))
-  }
-
-  const handleMoveDown = () => {
-    if (index === total - 1) return
-    const reordered = [...widgets]
-    ;[reordered[index], reordered[index + 1]] = [reordered[index + 1], reordered[index]]
-    saveAll(reordered.map((w, i) => ({ ...w, order: i })))
   }
 
   return (
@@ -196,10 +233,7 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
           </span>
           <span className="widget-card-title" title={widget.description}>{widget.title}</span>
           <div className="widget-card-actions" onClick={(e) => e.stopPropagation()}>
-            <button className="widget-icon-btn" onClick={handleMoveUp} disabled={index === 0} title="Move up">↑</button>
-            <button className="widget-icon-btn" onClick={handleMoveDown} disabled={index === total - 1} title="Move down">↓</button>
-            <button className="widget-icon-btn" onClick={handleRefresh} title="Ask agent to improve">🔄</button>
-            <button className="widget-icon-btn" onClick={() => setEditing(true)} title="Edit code">✏️</button>
+            <button className="widget-icon-btn" onClick={() => setEditing(true)} title="Edit widget code">✏️</button>
             {confirmDelete ? (
               <>
                 <button className="widget-icon-btn danger" onClick={() => removeWidget(widget.id)} title="Confirm delete">✓</button>
@@ -213,11 +247,11 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
 
         {!collapsed && (
           <div className="widget-card-body">
-            <WidgetRunner widget={widget} onRequestRefresh={handleRefresh} />
+            <WidgetRunner widget={widget} />
           </div>
         )}
 
-        {/* Resize handle — bottom-right corner, drag to change colSpan */}
+        {/* Resize handle — bottom-right corner */}
         <div
           className="widget-resize-handle"
           onMouseDown={onResizeStart}
@@ -229,6 +263,7 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
         <WidgetEditModal
           widget={widget}
           onClose={() => setEditing(false)}
+          onAskAgent={handleAskAgent}
           onSave={(updates) => {
             updateWidget(widget.id, updates)
             setEditing(false)
@@ -246,7 +281,7 @@ const WIDGET_CONTEXT_PROMPT = `
 The user is on the widget panel of the clawd-dashboard and may want to add a new widget. Here's a full briefing on how the widget system works so you can help them when they describe what they want.
 
 **What is a widget?**
-Each widget is a small JavaScript component that runs live in the dashboard. Widgets are stored server-side in \`widgets.json\` and hot-reloaded automatically. Users can add, edit, reorder, and delete them. Widgets are displayed in a CSS grid — narrow ones take one column, wide ones span the full row.
+Each widget is a small JavaScript component that runs live in the dashboard. Widgets are stored server-side in \`widgets.json\` and hot-reloaded automatically via SSE. Users can add, edit, and delete them. Widgets are displayed in a CSS grid — narrow ones take one column, wide ones span the full row.
 
 **How to deliver a widget**
 When the user asks you to create or modify a widget, respond with a \`\`\`widget code block containing JSON:
@@ -255,11 +290,17 @@ When the user asks you to create or modify a widget, respond with a \`\`\`widget
 \`\`\`
 The dashboard will auto-detect this block and install/update the widget immediately.
 
+**To UPDATE an existing widget, include its \`id\` field:**
+\`\`\`widget
+{"id":"<existing-widget-id>","title":"Widget Name","code":"...updated code..."}
+\`\`\`
+The dashboard will match by id and update in place.
+
 **JSON fields:**
 - \`title\` — display name (required)
 - \`description\` — one-line description shown on hover (optional)
 - \`size\` — layout hint: \`"sm"\` or \`"md"\` = one column (default), \`"lg"\` or \`"xl"\` = full row
-- \`id\` — include this only when *updating* an existing widget (omit for new ones)
+- \`id\` — include ONLY when updating an existing widget (omit for new ones)
 - \`code\` — the widget JavaScript (see rules below)
 
 **Widget code rules:**
@@ -267,11 +308,17 @@ The dashboard will auto-detect this block and install/update the widget immediat
 - **No JSX** — the code runs directly via \`new Function()\`, no transpilation
 - Available globals (injected automatically): \`React\`, \`useState\`, \`useEffect\`, \`useMemo\`, \`useCallback\`, \`useRef\`, \`fetch\`, \`exec(cmd)\`, \`console\`
 - \`exec(cmd)\` runs a shell command in the sandbox → \`Promise<{stdout, stderr, exitCode}>\`
-- Use CSS variables for theming (they match the dark dashboard palette): \`var(--text-primary)\`, \`var(--text-secondary)\`, \`var(--text-muted)\`, \`var(--bg-surface)\`, \`var(--bg-elevated)\`, \`var(--accent)\`, \`var(--accent-bright)\`, \`var(--accent-dim)\`, \`var(--accent-glow)\`, \`var(--border)\`, \`var(--border-light)\`, \`var(--mono)\`, \`var(--green)\`, \`var(--red)\`, \`var(--yellow)\`, \`var(--blue)\`, \`var(--cyan)\`
+- Use CSS variables for theming: \`var(--text-primary)\`, \`var(--text-secondary)\`, \`var(--text-muted)\`, \`var(--bg-surface)\`, \`var(--bg-elevated)\`, \`var(--accent)\`, \`var(--accent-bright)\`, \`var(--accent-dim)\`, \`var(--accent-glow)\`, \`var(--border)\`, \`var(--border-light)\`, \`var(--mono)\`, \`var(--green)\`, \`var(--red)\`, \`var(--yellow)\`, \`var(--blue)\`, \`var(--cyan)\`
 - For charts/graphs, use inline SVG — no external libraries are available
 - For live/polling data, use \`setInterval\` inside \`useEffect\` and always clear on cleanup
 - For persistent state across page reloads, use \`localStorage\`
 - Keep widgets self-contained — no imports, no external scripts
+
+**Writing tests for widgets:**
+After creating a widget, consider whether any logic should be verified in \`tests/presets.test.ts\`. For example:
+- The widget code should compile without throwing (call \`new Function(...)\` and verify a Widget function is returned)
+- If the widget has pure data-transform logic, extract it into a testable helper
+- Runtime behavior (fetch, exec) can be tested with mocks in the Vitest suite
 
 **Example (minimal):**
 \`\`\`widget
