@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useWidgetStore, type WidgetDef } from '../store/widgets'
 import { useGatewayStore } from '../store/gateway'
 import { WidgetRunner } from './WidgetRunner'
@@ -141,6 +141,9 @@ function WidgetPickerModal({
   )
 }
 
+// 160px columns + 8px gap → one cell = 168px
+const CELL_PX = 168
+
 // ── Widget Card ───────────────────────────────────────────────────────────────
 function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number; total: number }) {
   const { updateWidget, removeWidget, widgets, saveAll } = useWidgetStore()
@@ -148,6 +151,32 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
   const [collapsed, setCollapsed] = useState(false)
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [dragSpan, setDragSpan] = useState<number | null>(null)
+
+  const colSpan = dragSpan ?? widget.colSpan ?? 1
+
+  const onResizeStart = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const startX = e.clientX
+    const startSpan = widget.colSpan ?? 1
+    let current = startSpan
+
+    const onMove = (ev: MouseEvent) => {
+      const delta = ev.clientX - startX
+      const next = Math.max(1, Math.round(startSpan + delta / CELL_PX))
+      current = next
+      setDragSpan(next)
+    }
+    const onUp = () => {
+      updateWidget(widget.id, { colSpan: current })
+      setDragSpan(null)
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
 
   const handleRefresh = () => {
     sendMessage(
@@ -170,11 +199,12 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
     saveAll(reordered.map((w, i) => ({ ...w, order: i })))
   }
 
-  const sizeClass = `size-${widget.size ?? 'md'}`
-
   return (
     <>
-      <div className={`widget-card ${sizeClass}`}>
+      <div
+        className="widget-card"
+        style={{ gridColumn: `span ${colSpan}` }}
+      >
         <div className="widget-card-header" onClick={() => setCollapsed((c) => !c)}>
           <span style={{ fontSize: '10px', color: 'var(--text-muted)', minWidth: '10px' }}>
             {collapsed ? '▶' : '▼'}
@@ -201,6 +231,13 @@ function WidgetCard({ widget, index, total }: { widget: WidgetDef; index: number
             <WidgetRunner widget={widget} onRequestRefresh={handleRefresh} />
           </div>
         )}
+
+        {/* Resize handle — bottom-right corner, drag to change colSpan */}
+        <div
+          className="widget-resize-handle"
+          onMouseDown={onResizeStart}
+          title={`${colSpan} column${colSpan !== 1 ? 's' : ''} wide — drag to resize`}
+        />
       </div>
 
       {editing && (

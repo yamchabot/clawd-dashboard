@@ -290,19 +290,14 @@ body {
 .widget-grid {
   flex: 1;
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 8px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fill, 160px);
   grid-auto-rows: min-content;
   gap: 8px;
   align-content: start;
 }
-
-/* Size-based grid spanning */
-.widget-card.size-sm { grid-column: span 1; }
-.widget-card.size-md { grid-column: span 1; }
-.widget-card.size-lg { grid-column: 1 / -1; }
-.widget-card.size-xl { grid-column: 1 / -1; }
 
 /* Widget card */
 .widget-card {
@@ -311,9 +306,31 @@ body {
   border-radius: var(--radius);
   overflow: hidden;
   transition: border-color 0.15s;
+  position: relative;
 }
 
 .widget-card:hover { border-color: var(--border-light); }
+
+/* Drag-to-resize handle — bottom-right corner */
+.widget-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 18px;
+  height: 18px;
+  cursor: se-resize;
+  opacity: 0;
+  transition: opacity 0.15s;
+  /* Braille dots grid icon via CSS */
+  background-image: radial-gradient(circle, var(--border-light) 1.5px, transparent 1.5px);
+  background-size: 5px 5px;
+  background-position: 3px 3px;
+  background-repeat: repeat;
+  border-radius: 0 0 var(--radius) 0;
+}
+
+.widget-card:hover .widget-resize-handle { opacity: 1; }
+.widget-resize-handle:hover { opacity: 1 !important; background-image: radial-gradient(circle, var(--accent-bright) 1.5px, transparent 1.5px); }
 
 .widget-card-header {
   display: flex;
