@@ -4,6 +4,44 @@ import { getOrCreateDeviceIdentity } from '../gateway/crypto'
 import type { ChatMessage, Session, ToolCall } from '../gateway/types'
 import { v4 as uuidv4 } from 'uuid'
 
+// ── localStorage chat persistence ─────────────────────────────────────────────
+const CHAT_PREFIX = 'clawd-chat-v1:'
+const CHAT_INDEX_KEY = 'clawd-chat-index'
+
+function persistMessages(key: string, messages: ChatMessage[]) {
+  try {
+    const toSave = messages.filter((m) => !m.partial)
+    localStorage.setItem(`${CHAT_PREFIX}${key}`, JSON.stringify(toSave))
+    const index: string[] = JSON.parse(localStorage.getItem(CHAT_INDEX_KEY) || '[]')
+    if (!index.includes(key)) {
+      index.push(key)
+      localStorage.setItem(CHAT_INDEX_KEY, JSON.stringify(index))
+    }
+  } catch { /* storage full / private mode */ }
+}
+
+function loadPersistedMessages(key: string): ChatMessage[] {
+  try {
+    const raw = localStorage.getItem(`${CHAT_PREFIX}${key}`)
+    if (raw) return JSON.parse(raw) as ChatMessage[]
+  } catch { /* corrupt */ }
+  return []
+}
+
+function initSessionChats(): Record<string, { messages: ChatMessage[]; streaming: boolean; streamingRunId: string | null }> {
+  try {
+    const index: string[] = JSON.parse(localStorage.getItem(CHAT_INDEX_KEY) || '[]')
+    const result: Record<string, { messages: ChatMessage[]; streaming: boolean; streamingRunId: string | null }> = {}
+    for (const key of index) {
+      const msgs = loadPersistedMessages(key)
+      if (msgs.length > 0) result[key] = { messages: msgs, streaming: false, streamingRunId: null }
+    }
+    return result
+  } catch {
+    return {}
+  }
+}
+
 interface SessionChat {
   messages: ChatMessage[]
   streaming: boolean
@@ -69,7 +107,7 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
   deviceId: null,
   sessions: [],
   activeSessionKey: localStorage.getItem('clawd-active-session') || `main-${Date.now()}`,
-  sessionChats: {},
+  sessionChats: initSessionChats(),
 
   setGatewayConfig: (url, token) => {
     localStorage.setItem('clawd-gateway-url', url)
@@ -150,9 +188,8 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
           if (payload.state === 'final') {
             const msgs = [...chat.messages]
             const lastIdx = msgs.findLastIndex((m) => m.runId === payload.runId)
-            if (lastIdx >= 0) {
-              msgs[lastIdx] = { ...msgs[lastIdx], partial: false }
-            }
+            if (lastIdx >= 0) msgs[lastIdx] = { ...msgs[lastIdx], partial: false }
+            persistMessages(key, msgs)
             return {
               sessionChats: {
                 ...state.sessionChats,
@@ -174,6 +211,7 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
                   : msgs[lastIdx].content,
               }
             }
+            persistMessages(key, msgs)
             return {
               sessionChats: {
                 ...state.sessionChats,
@@ -246,14 +284,12 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
 
     set((state) => {
       const chat = getChat(state, activeSessionKey)
+      const messages = [...chat.messages, userMsg]
+      persistMessages(activeSessionKey, messages)
       return {
         sessionChats: {
           ...state.sessionChats,
-          [activeSessionKey]: {
-            ...chat,
-            messages: [...chat.messages, userMsg],
-            streaming: true,
-          },
+          [activeSessionKey]: { ...chat, messages, streaming: true },
         },
       }
     })
@@ -304,14 +340,11 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
         },
       )
 
+      if (messages.length > 0) persistMessages(key, messages)
       set((state) => ({
         sessionChats: {
           ...state.sessionChats,
-          [key]: {
-            messages,
-            streaming: false,
-            streamingRunId: null,
-          },
+          [key]: { messages, streaming: false, streamingRunId: null },
         },
       }))
     } catch (e) {
