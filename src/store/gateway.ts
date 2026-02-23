@@ -106,7 +106,14 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
   pairingRequired: false,
   deviceId: null,
   sessions: [],
-  activeSessionKey: localStorage.getItem('clawd-active-session') || `main-${Date.now()}`,
+  activeSessionKey: (() => {
+    const stored = localStorage.getItem('clawd-active-session')
+    if (stored) return stored
+    // First visit — generate a stable key and save it so refreshes reuse it
+    const key = `main-${Date.now()}`
+    localStorage.setItem('clawd-active-session', key)
+    return key
+  })(),
   sessionChats: initSessionChats(),
 
   setGatewayConfig: (url, token) => {
@@ -340,13 +347,18 @@ export const useGatewayStore = create<GatewayStore>((set, get) => ({
         },
       )
 
-      if (messages.length > 0) persistMessages(key, messages)
-      set((state) => ({
-        sessionChats: {
-          ...state.sessionChats,
-          [key]: { messages, streaming: false, streamingRunId: null },
-        },
-      }))
+      if (messages.length > 0) {
+        // Gateway is the source of truth — update state + localStorage
+        persistMessages(key, messages)
+        set((state) => ({
+          sessionChats: {
+            ...state.sessionChats,
+            [key]: { messages, streaming: false, streamingRunId: null },
+          },
+        }))
+      }
+      // If gateway returned nothing, keep whatever initSessionChats() loaded
+      // from localStorage (don't overwrite with empty array)
     } catch (e) {
       console.warn('[history]', e)
     }

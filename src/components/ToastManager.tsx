@@ -39,18 +39,11 @@ function install() {
   if (_installed) return
   _installed = true
 
-  // console.error
+  // console.error only — warn is too noisy (React internals, gateway system messages)
   const origError = console.error.bind(console)
   console.error = (...args: unknown[]) => {
     origError(...args)
     emit('error', formatArgs(args))
-  }
-
-  // console.warn — optional but useful for widget sandbox warnings
-  const origWarn = console.warn.bind(console)
-  console.warn = (...args: unknown[]) => {
-    origWarn(...args)
-    emit('warn', formatArgs(args))
   }
 
   // Uncaught JS errors
