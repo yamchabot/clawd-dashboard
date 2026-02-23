@@ -2,76 +2,81 @@
   "version": 1,
   "widgets": [
     {
-      "title": "Countdown Timer",
-      "description": "Set a timer in minutes",
-      "code": "function Widget() {\n  const [secs, setSecs] = React.useState(0);\n  const [running, setRunning] = React.useState(false);\n  const [input, setInput] = React.useState('5');\n  const [done, setDone] = React.useState(false);\n  useEffect(() => {\n    if (!running) return;\n    if (secs <= 0) { setRunning(false); setDone(true); return; }\n    const t = setTimeout(() => setSecs(s => s - 1), 1000);\n    return () => clearTimeout(t);\n  }, [running, secs]);\n  const start = () => {\n    const s = Math.max(1, parseInt(input) || 1) * 60;\n    setSecs(s); setRunning(true); setDone(false);\n  };\n  const m = Math.floor(secs / 60), s = secs % 60;\n  const disp = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');\n  const isUrgent = secs > 0 && secs <= 60;\n  return React.createElement('div', { style: { textAlign: 'center', padding: '8px 0' } },\n    done\n      ? React.createElement('div', { style: { fontSize: '20px', color: 'var(--green)', marginBottom: '12px' } }, '\\u2713 Time\\u2019s up!')\n      : React.createElement('div', {\n          style: {\n            fontSize: '36px', fontFamily: 'var(--mono)', fontWeight: 700, lineHeight: 1, marginBottom: '12px',\n            color: isUrgent ? 'var(--red)' : 'var(--accent-bright)'\n          }\n        }, disp),\n    running\n      ? React.createElement('button', {\n          onClick: () => setRunning(false),\n          style: { padding: '5px 16px', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '12px' }\n        }, '\\u23f8 Pause')\n      : React.createElement('div', { style: { display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' } },\n          React.createElement('input', {\n            type: 'number', value: input, min: 1, max: 180,\n            onChange: e => setInput(e.target.value),\n            style: { width: '50px', padding: '5px', textAlign: 'center', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-primary)', fontFamily: 'var(--mono)', fontSize: '14px', outline: 'none' }\n          }),\n          React.createElement('span', { style: { fontSize: '11px', color: 'var(--text-muted)' } }, 'min'),\n          React.createElement('button', {\n            onClick: start,\n            style: { padding: '5px 14px', borderRadius: '4px', border: '1px solid var(--accent-dim)', background: 'var(--accent-glow)', color: 'var(--accent-bright)', cursor: 'pointer', fontSize: '12px' }\n          }, '\\u25b6 Start'),\n          secs > 0 ? React.createElement('button', {\n            onClick: () => { setSecs(0); setDone(false); },\n            style: { padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '12px' }\n          }, '\\u21ba') : null\n        )\n  );\n}",
-      "size": "sm",
-      "id": "9d92eea0-72ae-49aa-9b2c-88ea0d47de9c",
+      "id": "405241d5-5545-4a11-bcfc-eac83842f438",
+      "title": "My Widget",
+      "description": "AI-created animated widget",
+      "code": "function Widget() {\n  const randomColor = () => `hsl(${Math.floor(Math.random() * 360)}, 70%, 55%)`;\n  const randomSize = () => Math.floor(Math.random() * 80) + 40;\n\n  const [color, setColor] = React.useState(randomColor);\n  const [size, setSize] = React.useState(randomSize);\n\n  React.useEffect(() => {\n    const id = setInterval(() => {\n      setColor(randomColor());\n      setSize(randomSize());\n    }, 10000);\n    return () => clearInterval(id);\n  }, []);\n\n  return React.createElement(\n    'div',\n    {\n      style: {\n        display: 'flex',\n        alignItems: 'center',\n        justifyContent: 'center',\n        width: '100%',\n        height: '200px',\n        flexShrink: 0,\n        background: '#111',\n        overflow: 'hidden',\n      }\n    },\n    React.createElement('div', {\n      style: {\n        width: size,\n        height: size,\n        borderRadius: '50%',\n        background: color,\n        boxShadow: `0 0 ${size / 2}px ${color}`,\n        transition: 'width 0.6s ease, height 0.6s ease, background 0.6s ease, box-shadow 0.6s ease',\n        flexShrink: 0,\n      }\n    })\n  );\n}",
+      "size": "md",
       "enabled": true,
       "order": 0,
-      "createdAt": 1771768799270,
-      "updatedAt": 1771808808495,
-      "colSpan": 3,
-      "rowSpan": 2
+      "createdAt": 1771822017951,
+      "updatedAt": 1771822017951
     },
     {
-      "title": "Random Joke",
-      "description": "A little levity for your day",
-      "code": "function Widget() {\n  const [joke, setJoke] = React.useState(null);\n  const [loading, setLoading] = React.useState(false);\n  const load = () => {\n    setLoading(true);\n    fetch('https://official-joke-api.appspot.com/random_joke')\n      .then(r => r.json())\n      .then(j => { setJoke(j); setLoading(false); })\n      .catch(() => {\n        setJoke({ setup: 'Why do programmers prefer dark mode?', punchline: 'Because light attracts bugs!' });\n        setLoading(false);\n      });\n  };\n  useEffect(() => { load(); }, []);\n  if (loading || !joke) return React.createElement('div', { style: { padding: '12px', color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center' } }, 'Loading...');\n  return React.createElement('div', { style: { padding: '4px 0' } },\n    React.createElement('div', { style: { fontSize: '13px', color: 'var(--text-primary)', marginBottom: '10px', lineHeight: 1.6 } }, joke.setup),\n    React.createElement('div', {\n      style: { fontSize: '13px', color: 'var(--accent-bright)', fontStyle: 'italic', lineHeight: 1.6, borderLeft: '2px solid var(--accent-dim)', paddingLeft: '10px' }\n    }, joke.punchline),\n    React.createElement('button', {\n      onClick: load,\n      style: { marginTop: '10px', padding: '4px 12px', fontSize: '11px', border: '1px solid var(--border)', borderRadius: '4px', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }\n    }, 'Next joke \\u2192')\n  );\n}",
-      "size": "md",
-      "id": "43b3cda3-5c36-4f11-b31b-ec394bd41774",
-      "enabled": true,
-      "order": 1,
-      "createdAt": 1771768798254,
-      "updatedAt": 1771768798254
-    },
-    {
-      "title": "System Info",
-      "description": "Sandbox uptime and disk usage",
-      "code": "function Widget() {\n  const [info, setInfo] = React.useState(null);\n  const load = async () => {\n    setInfo(null);\n    try {\n      const [up, disk, mem] = await Promise.all([\n        exec('uptime'),\n        exec('df -h / | tail -1'),\n        exec('free -h 2>/dev/null | grep Mem || echo \"n/a\"')\n      ]);\n      const uptimeLine = up.stdout.replace(/^.*?up\\s+/, '').replace(/,\\s*\\d+ user.*/, '').trim();\n      const diskParts = disk.stdout.trim().split(/\\s+/);\n      const memLine = mem.stdout.trim().split(/\\s+/).slice(0, 4).join(' ');\n      setInfo({ uptime: uptimeLine, disk: (diskParts[2] || '?') + ' / ' + (diskParts[1] || '?'), mem: memLine });\n    } catch(e) {\n      setInfo({ uptime: 'n/a', disk: 'n/a', mem: 'n/a' });\n    }\n  };\n  useEffect(() => { load(); }, []);\n  if (!info) return React.createElement('div', { style: { padding: '8px', fontSize: '12px', color: 'var(--text-muted)' } }, 'Loading...');\n  const Row = (lbl, val) => React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--border)', fontSize: '12px' } },\n    React.createElement('span', { style: { color: 'var(--text-muted)' } }, lbl),\n    React.createElement('span', { style: { fontFamily: 'var(--mono)', color: 'var(--text-primary)', fontSize: '11px' } }, val)\n  );\n  return React.createElement('div', null,\n    Row('uptime', info.uptime),\n    Row('disk /', info.disk),\n    Row('memory', info.mem),\n    React.createElement('button', {\n      onClick: load,\n      style: { marginTop: '6px', padding: '3px 8px', fontSize: '10px', border: '1px solid var(--border)', borderRadius: '3px', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }\n    }, '\\u21bb Refresh')\n  );\n}",
-      "size": "sm",
-      "id": "a87444b0-3cac-4ba1-992a-37fab3f5eadf",
-      "enabled": true,
-      "order": 2,
-      "createdAt": 1771768798719,
-      "updatedAt": 1771808816330,
-      "colSpan": 2,
-      "rowSpan": 3
-    },
-    {
-      "title": "Quick Notes",
-      "description": "Scratch pad that saves locally",
-      "code": "function Widget() {\n  const KEY = 'oc-widget-quicknotes';\n  const [text, setText] = React.useState(() => localStorage.getItem(KEY) || '');\n  const onChange = e => {\n    setText(e.target.value);\n    localStorage.setItem(KEY, e.target.value);\n  };\n  return React.createElement('div', null,\n    React.createElement('textarea', {\n      value: text,\n      onChange,\n      placeholder: 'Type notes here...',\n      style: {\n        width: '100%', minHeight: '90px', resize: 'vertical',\n        background: 'var(--bg-surface)', border: '1px solid var(--border)',\n        borderRadius: '4px', padding: '8px', color: 'var(--text-primary)',\n        fontFamily: 'var(--sans)', fontSize: '12px', lineHeight: 1.5,\n        outline: 'none'\n      }\n    }),\n    React.createElement('div', {\n      style: { fontSize: '10px', color: 'var(--text-muted)', textAlign: 'right', marginTop: '3px' }\n    }, text.length + ' chars')\n  );\n}",
-      "size": "md",
-      "id": "5be26b0e-ecbd-49ac-b095-1046c235f0b0",
-      "enabled": true,
-      "order": 3,
-      "createdAt": 1771768797103,
-      "updatedAt": 1771768797103
-    },
-    {
-      "title": "Weather",
-      "description": "Current conditions via wttr.in",
-      "code": "function Widget() {\n  const [d, setD] = React.useState(null);\n  const [err, setErr] = React.useState(null);\n  const load = () => {\n    setErr(null);\n    fetch('https://wttr.in/?format=j1')\n      .then(r => r.json())\n      .then(j => {\n        const c = j.current_condition[0];\n        const area = j.nearest_area[0];\n        setD({\n          temp: c.temp_F + '\\u00b0F',\n          desc: c.weatherDesc[0].value,\n          feels: c.FeelsLikeF + '\\u00b0F',\n          humidity: c.humidity + '%',\n          loc: area.areaName[0].value + ', ' + area.region[0].value\n        });\n      })\n      .catch(() => setErr('Could not load weather'));\n  };\n  useEffect(() => { load(); }, []);\n  if (err) return React.createElement('div', {\n    style: { padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }\n  },\n    React.createElement('div', { style: { color: 'var(--red)', fontSize: '12px' } }, err),\n    React.createElement('button', {\n      onClick: load,\n      style: { padding: '3px 10px', fontSize: '11px', border: '1px solid var(--border)', borderRadius: '4px', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', alignSelf: 'flex-start' }\n    }, '\\u21bb Retry')\n  );\n  if (!d) return React.createElement('div', { style: { padding: '8px', color: 'var(--text-muted)', fontSize: '12px' } }, 'Loading weather...');\n  return React.createElement('div', { style: { padding: '4px 0' } },\n    React.createElement('div', { style: { fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' } }, '\\ud83d\\udccd ' + d.loc),\n    React.createElement('div', { style: { fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 } }, d.temp),\n    React.createElement('div', { style: { fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 8px' } }, d.desc),\n    React.createElement('div', { style: { display: 'flex', gap: '14px', fontSize: '11px', color: 'var(--text-muted)' } },\n      React.createElement('span', null, 'Feels ' + d.feels),\n      React.createElement('span', null, d.humidity + ' humidity')\n    )\n  );\n}",
-      "size": "md",
-      "id": "bbdab7b1-f783-4282-9a95-d67a071fc003",
-      "enabled": true,
-      "order": 4,
-      "createdAt": 1771808819912,
-      "updatedAt": 1771808819912
-    },
-    {
+      "id": "preset-clock-inst",
       "title": "Digital Clock",
       "description": "Live clock with date display",
-      "code": "function Widget() {\n  const [t, setT] = React.useState(new Date());\n  useEffect(() => {\n    const id = setInterval(() => setT(new Date()), 1000);\n    return () => clearInterval(id);\n  }, []);\n  const p = n => String(n).padStart(2, '0');\n  const time = p(t.getHours()) + ':' + p(t.getMinutes()) + ':' + p(t.getSeconds());\n  const date = t.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });\n  return React.createElement('div', { style: { textAlign: 'center', padding: '12px 8px' } },\n    React.createElement('div', {\n      style: {\n        fontSize: '30px', fontFamily: 'var(--mono)', fontWeight: 700,\n        color: 'var(--accent-bright)', letterSpacing: '3px', lineHeight: 1\n      }\n    }, time),\n    React.createElement('div', {\n      style: { fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }\n    }, date)\n  );\n}",
       "size": "sm",
-      "id": "f37b2537-51be-4537-b832-7f9f5c46a77e",
+      "enabled": true,
+      "order": 1,
+      "createdAt": 1740000000001,
+      "updatedAt": 1740000000001,
+      "code": "function Widget() {\n  const [t, setT] = React.useState(new Date());\n  useEffect(() => {\n    const id = setInterval(() => setT(new Date()), 1000);\n    return () => clearInterval(id);\n  }, []);\n  const p = n => String(n).padStart(2, '0');\n  const time = p(t.getHours()) + ':' + p(t.getMinutes()) + ':' + p(t.getSeconds());\n  const date = t.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });\n  return React.createElement('div', { style: { textAlign: 'center', padding: '12px 8px' } },\n    React.createElement('div', {\n      style: {\n        fontSize: '30px', fontFamily: 'var(--mono)', fontWeight: 700,\n        color: 'var(--accent-bright)', letterSpacing: '3px', lineHeight: 1\n      }\n    }, time),\n    React.createElement('div', {\n      style: { fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }\n    }, date)\n  );\n}"
+    },
+    {
+      "id": "preset-timer-inst",
+      "title": "Countdown Timer",
+      "description": "Set a timer in minutes",
+      "size": "sm",
+      "enabled": true,
+      "order": 2,
+      "createdAt": 1740000000002,
+      "updatedAt": 1740000000002,
+      "code": "function Widget() {\n  const [secs, setSecs] = React.useState(0);\n  const [running, setRunning] = React.useState(false);\n  const [input, setInput] = React.useState('5');\n  const [done, setDone] = React.useState(false);\n  useEffect(() => {\n    if (!running) return;\n    if (secs <= 0) { setRunning(false); setDone(true); return; }\n    const t = setTimeout(() => setSecs(s => s - 1), 1000);\n    return () => clearTimeout(t);\n  }, [running, secs]);\n  const start = () => {\n    const s = Math.max(1, parseInt(input) || 1) * 60;\n    setSecs(s); setRunning(true); setDone(false);\n  };\n  const m = Math.floor(secs / 60), s = secs % 60;\n  const disp = String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');\n  const isUrgent = secs > 0 && secs <= 60;\n  return React.createElement('div', { style: { textAlign: 'center', padding: '8px 0' } },\n    done\n      ? React.createElement('div', { style: { fontSize: '20px', color: 'var(--green)', marginBottom: '12px' } }, '\\u2713 Time\\u2019s up!')\n      : React.createElement('div', {\n          style: {\n            fontSize: '36px', fontFamily: 'var(--mono)', fontWeight: 700, lineHeight: 1, marginBottom: '12px',\n            color: isUrgent ? 'var(--red)' : 'var(--accent-bright)'\n          }\n        }, disp),\n    running\n      ? React.createElement('button', {\n          onClick: () => setRunning(false),\n          style: { padding: '5px 16px', borderRadius: '4px', border: '1px solid var(--border)', background: 'var(--bg-elevated)', color: 'var(--text-secondary)', cursor: 'pointer', fontSize: '12px' }\n        }, '\\u23f8 Pause')\n      : React.createElement('div', { style: { display: 'flex', gap: '8px', justifyContent: 'center', alignItems: 'center' } },\n          React.createElement('input', {\n            type: 'number', value: input, min: 1, max: 180,\n            onChange: e => setInput(e.target.value),\n            style: { width: '50px', padding: '5px', textAlign: 'center', background: 'var(--bg-surface)', border: '1px solid var(--border)', borderRadius: '4px', color: 'var(--text-primary)', fontFamily: 'var(--mono)', fontSize: '14px', outline: 'none' }\n          }),\n          React.createElement('span', { style: { fontSize: '11px', color: 'var(--text-muted)' } }, 'min'),\n          React.createElement('button', {\n            onClick: start,\n            style: { padding: '5px 14px', borderRadius: '4px', border: '1px solid var(--accent-dim)', background: 'var(--accent-glow)', color: 'var(--accent-bright)', cursor: 'pointer', fontSize: '12px' }\n          }, '\\u25b6 Start'),\n          secs > 0 ? React.createElement('button', {\n            onClick: () => { setSecs(0); setDone(false); },\n            style: { padding: '5px 8px', borderRadius: '4px', border: '1px solid var(--border)', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '12px' }\n          }, '\\u21ba') : null\n        )\n  );\n}"
+    },
+    {
+      "id": "preset-sysinfo-inst",
+      "title": "System Info",
+      "description": "Sandbox uptime and disk usage",
+      "size": "sm",
+      "enabled": true,
+      "order": 3,
+      "createdAt": 1740000000003,
+      "updatedAt": 1740000000003,
+      "code": "function Widget() {\n  const [info, setInfo] = React.useState(null);\n  const load = async () => {\n    setInfo(null);\n    try {\n      const [up, disk, mem] = await Promise.all([\n        exec('uptime'),\n        exec('df -h / | tail -1'),\n        exec('free -h 2>/dev/null | grep Mem || echo \"n/a\"')\n      ]);\n      const uptimeLine = up.stdout.replace(/^.*?up\\s+/, '').replace(/,\\s*\\d+ user.*/, '').trim();\n      const diskParts = disk.stdout.trim().split(/\\s+/);\n      const memLine = mem.stdout.trim().split(/\\s+/).slice(0, 4).join(' ');\n      setInfo({ uptime: uptimeLine, disk: (diskParts[2] || '?') + ' / ' + (diskParts[1] || '?'), mem: memLine });\n    } catch(e) {\n      setInfo({ uptime: 'n/a', disk: 'n/a', mem: 'n/a' });\n    }\n  };\n  useEffect(() => { load(); }, []);\n  if (!info) return React.createElement('div', { style: { padding: '8px', fontSize: '12px', color: 'var(--text-muted)' } }, 'Loading...');\n  const Row = (lbl, val) => React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid var(--border)', fontSize: '12px' } },\n    React.createElement('span', { style: { color: 'var(--text-muted)' } }, lbl),\n    React.createElement('span', { style: { fontFamily: 'var(--mono)', color: 'var(--text-primary)', fontSize: '11px' } }, val)\n  );\n  return React.createElement('div', null,\n    Row('uptime', info.uptime),\n    Row('disk /', info.disk),\n    Row('memory', info.mem),\n    React.createElement('button', {\n      onClick: load,\n      style: { marginTop: '6px', padding: '3px 8px', fontSize: '10px', border: '1px solid var(--border)', borderRadius: '3px', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }\n    }, '\\u21bb Refresh')\n  );\n}"
+    },
+    {
+      "id": "preset-notes-inst",
+      "title": "Quick Notes",
+      "description": "Scratch pad that saves locally",
+      "size": "md",
+      "enabled": true,
+      "order": 4,
+      "createdAt": 1740000000004,
+      "updatedAt": 1740000000004,
+      "code": "function Widget() {\n  const KEY = 'oc-widget-quicknotes';\n  const [text, setText] = React.useState(() => localStorage.getItem(KEY) || '');\n  const onChange = e => {\n    setText(e.target.value);\n    localStorage.setItem(KEY, e.target.value);\n  };\n  return React.createElement('div', null,\n    React.createElement('textarea', {\n      value: text,\n      onChange,\n      placeholder: 'Type notes here...',\n      style: {\n        width: '100%', minHeight: '90px', resize: 'vertical',\n        background: 'var(--bg-surface)', border: '1px solid var(--border)',\n        borderRadius: '4px', padding: '8px', color: 'var(--text-primary)',\n        fontFamily: 'var(--sans)', fontSize: '12px', lineHeight: 1.5,\n        outline: 'none'\n      }\n    }),\n    React.createElement('div', {\n      style: { fontSize: '10px', color: 'var(--text-muted)', textAlign: 'right', marginTop: '3px' }\n    }, text.length + ' chars')\n  );\n}"
+    },
+    {
+      "id": "preset-weather-inst",
+      "title": "Weather",
+      "description": "Current conditions via wttr.in",
+      "size": "md",
       "enabled": true,
       "order": 5,
-      "createdAt": 1771768793454,
-      "updatedAt": 1771808229195,
-      "colSpan": 3,
-      "rowSpan": 2
+      "createdAt": 1740000000005,
+      "updatedAt": 1740000000005,
+      "code": "function Widget() {\n  const [d, setD] = React.useState(null);\n  const [err, setErr] = React.useState(null);\n  const load = () => {\n    setErr(null);\n    fetch('https://wttr.in/?format=j1')\n      .then(r => r.json())\n      .then(j => {\n        const c = j.current_condition[0];\n        const area = j.nearest_area[0];\n        setD({\n          temp: c.temp_F + '\\u00b0F',\n          desc: c.weatherDesc[0].value,\n          feels: c.FeelsLikeF + '\\u00b0F',\n          humidity: c.humidity + '%',\n          loc: area.areaName[0].value + ', ' + area.region[0].value\n        });\n      })\n      .catch(() => setErr('Could not load weather'));\n  };\n  useEffect(() => { load(); }, []);\n  if (err) return React.createElement('div', {\n    style: { padding: '8px', display: 'flex', flexDirection: 'column', gap: '6px' }\n  },\n    React.createElement('div', { style: { color: 'var(--red)', fontSize: '12px' } }, err),\n    React.createElement('button', {\n      onClick: load,\n      style: { padding: '3px 10px', fontSize: '11px', border: '1px solid var(--border)', borderRadius: '4px', background: 'none', color: 'var(--text-muted)', cursor: 'pointer', alignSelf: 'flex-start' }\n    }, '\\u21bb Retry')\n  );\n  if (!d) return React.createElement('div', { style: { padding: '8px', color: 'var(--text-muted)', fontSize: '12px' } }, 'Loading weather...');\n  return React.createElement('div', { style: { padding: '4px 0' } },\n    React.createElement('div', { style: { fontSize: '11px', color: 'var(--text-muted)', marginBottom: '6px' } }, '\\ud83d\\udccd ' + d.loc),\n    React.createElement('div', { style: { fontSize: '28px', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1 } }, d.temp),\n    React.createElement('div', { style: { fontSize: '12px', color: 'var(--text-secondary)', margin: '4px 0 8px' } }, d.desc),\n    React.createElement('div', { style: { display: 'flex', gap: '14px', fontSize: '11px', color: 'var(--text-muted)' } },\n      React.createElement('span', null, 'Feels ' + d.feels),\n      React.createElement('span', null, d.humidity + ' humidity')\n    )\n  );\n}"
+    },
+    {
+      "id": "preset-joke-inst",
+      "title": "Random Joke",
+      "description": "A little levity for your day",
+      "size": "md",
+      "enabled": true,
+      "order": 6,
+      "createdAt": 1740000000006,
+      "updatedAt": 1740000000006,
+      "code": "function Widget() {\n  const [joke, setJoke] = React.useState(null);\n  const [loading, setLoading] = React.useState(false);\n  const load = () => {\n    setLoading(true);\n    fetch('https://official-joke-api.appspot.com/random_joke')\n      .then(r => r.json())\n      .then(j => { setJoke(j); setLoading(false); })\n      .catch(() => {\n        setJoke({ setup: 'Why do programmers prefer dark mode?', punchline: 'Because light attracts bugs!' });\n        setLoading(false);\n      });\n  };\n  useEffect(() => { load(); }, []);\n  if (loading || !joke) return React.createElement('div', { style: { padding: '12px', color: 'var(--text-muted)', fontSize: '12px', textAlign: 'center' } }, 'Loading...');\n  return React.createElement('div', { style: { padding: '4px 0' } },\n    React.createElement('div', { style: { fontSize: '13px', color: 'var(--text-primary)', marginBottom: '10px', lineHeight: 1.6 } }, joke.setup),\n    React.createElement('div', {\n      style: { fontSize: '13px', color: 'var(--accent-bright)', fontStyle: 'italic', lineHeight: 1.6, borderLeft: '2px solid var(--accent-dim)', paddingLeft: '10px' }\n    }, joke.punchline),\n    React.createElement('button', {\n      onClick: load,\n      style: { marginTop: '10px', padding: '4px 12px', fontSize: '11px', border: '1px solid var(--border)', borderRadius: '4px', background: 'none', color: 'var(--text-muted)', cursor: 'pointer' }\n    }, 'Next joke \\u2192')\n  );\n}"
     }
   ]
 }

@@ -85,6 +85,12 @@ function handleApi(req, res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
   if (method === 'OPTIONS') { res.writeHead(204); res.end(); return }
 
+  // Prevent Cloudflare / browser caching of all API responses
+  if (url.startsWith('/api/')) {
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Pragma', 'no-cache')
+  }
+
   // GET /api/widgets
   if (url === '/api/widgets' && method === 'GET') {
     const data = readWidgets()
