@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { SessionBar } from './components/SessionBar'
 import { WidgetPanel } from './components/WidgetPanel'
 import { ChatPanel } from './components/ChatPanel'
+import { ToastManager } from './components/ToastManager'
 import { useGatewayStore } from './store/gateway'
 
 const STORAGE_KEY = 'clawd-widget-panel-width'
@@ -111,6 +112,7 @@ export function App() {
 
   return (
     <div className="app">
+      <ToastManager />
       <SessionBar />
       <div className="main-content" ref={mainRef}>
         <WidgetPanel width={widgetWidth} />
