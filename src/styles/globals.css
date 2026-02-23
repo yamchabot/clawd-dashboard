@@ -313,6 +313,9 @@ body {
 }
 
 .widget-card:hover { border-color: var(--border-light); }
+.widget-card.dragging { opacity: 0.4; }
+.widget-card.drop-target { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-dim); }
+.widget-card-header:active { cursor: grabbing; }
 
 /* Drag-to-resize handle — bottom-right corner */
 .widget-resize-handle {

@@ -168,12 +168,13 @@ const DEFAULT_ROWS = 2
 
 // ── Widget Card ───────────────────────────────────────────────────────────────
 function WidgetCard({ widget, index: _index, total: _total }: { widget: WidgetDef; index: number; total: number }) {
-  const { updateWidget, removeWidget } = useWidgetStore()
+  const { updateWidget, removeWidget, widgets, saveAll } = useWidgetStore()
   const { sendMessage } = useGatewayStore()
   const [collapsed, setCollapsed] = useState(false)
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [dragSpan, setDragSpan] = useState<{ col: number; row: number } | null>(null)
+  const [dropTarget, setDropTarget] = useState(false)
 
   const colSpan = dragSpan?.col ?? widget.colSpan ?? DEFAULT_COLS
   const rowSpan = dragSpan?.row ?? widget.rowSpan ?? DEFAULT_ROWS
@@ -205,6 +206,36 @@ function WidgetCard({ widget, index: _index, total: _total }: { widget: WidgetDe
     window.addEventListener('mouseup', onUp)
   }
 
+  // ── HTML5 drag-to-reorder ─────────────────────────────────────────────────
+  const onDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', widget.id)
+    // Delay so the drag ghost captures the normal card state
+    setTimeout(() => (e.target as HTMLElement).closest('.widget-card')?.classList.add('dragging'), 0)
+  }
+  const onDragEnd = (e: React.DragEvent) => {
+    ;(e.target as HTMLElement).closest('.widget-card')?.classList.remove('dragging')
+  }
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setDropTarget(true)
+  }
+  const onDragLeave = () => setDropTarget(false)
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDropTarget(false)
+    const draggedId = e.dataTransfer.getData('text/plain')
+    if (!draggedId || draggedId === widget.id) return
+    const list = [...widgets]
+    const fromIdx = list.findIndex((w) => w.id === draggedId)
+    const toIdx = list.findIndex((w) => w.id === widget.id)
+    if (fromIdx === -1 || toIdx === -1) return
+    const [item] = list.splice(fromIdx, 1)
+    list.splice(toIdx, 0, item)
+    saveAll(list.map((w, i) => ({ ...w, order: i })))
+  }
+
   /** Sends a structured prompt to the agent to rewrite/update this widget. */
   const handleAskAgent = (guidance: string, currentCode: string) => {
     const title = widget.title
@@ -224,10 +255,19 @@ function WidgetCard({ widget, index: _index, total: _total }: { widget: WidgetDe
   return (
     <>
       <div
-        className="widget-card"
+        className={`widget-card${dropTarget ? ' drop-target' : ''}`}
         style={{ gridColumn: `span ${colSpan}`, gridRow: `span ${rowSpan}` }}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
       >
-        <div className="widget-card-header" onClick={() => setCollapsed((c) => !c)}>
+        <div
+          className="widget-card-header"
+          draggable
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+          onClick={() => setCollapsed((c) => !c)}
+        >
           <span style={{ fontSize: '10px', color: 'var(--text-muted)', minWidth: '10px' }}>
             {collapsed ? '▶' : '▼'}
           </span>
