@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useWidgetStore, type WidgetDef } from '../store/widgets'
 import { useGatewayStore } from '../store/gateway'
 import { WidgetRunner } from './WidgetRunner'
@@ -167,18 +167,36 @@ const DEFAULT_COLS = 2
 const DEFAULT_ROWS = 2
 
 // ── Widget Card ───────────────────────────────────────────────────────────────
-function WidgetCard({ widget, index: _index, total: _total }: { widget: WidgetDef; index: number; total: number }) {
-  const { updateWidget, removeWidget, widgets, saveAll } = useWidgetStore()
+interface WidgetCardProps {
+  widget: WidgetDef
+  isDragging: boolean       // this card is currently being dragged
+  insertBefore: boolean     // show "drop here" indicator above this card
+  onDragStart: () => void
+  onDragEnd: () => void
+  onDragOverCard: (e: React.DragEvent<HTMLDivElement>) => void
+  onDropOnCard: () => void
+}
+
+function WidgetCard({
+  widget,
+  isDragging,
+  insertBefore,
+  onDragStart,
+  onDragEnd,
+  onDragOverCard,
+  onDropOnCard,
+}: WidgetCardProps) {
+  const { updateWidget, removeWidget } = useWidgetStore()
   const { sendMessage } = useGatewayStore()
   const [collapsed, setCollapsed] = useState(false)
   const [editing, setEditing] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [dragSpan, setDragSpan] = useState<{ col: number; row: number } | null>(null)
-  const [dropTarget, setDropTarget] = useState(false)
 
   const colSpan = dragSpan?.col ?? widget.colSpan ?? DEFAULT_COLS
   const rowSpan = dragSpan?.row ?? widget.rowSpan ?? DEFAULT_ROWS
 
+  // ── Grid resize handle ────────────────────────────────────────────────────
   const onResizeStart = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
@@ -190,11 +208,9 @@ function WidgetCard({ widget, index: _index, total: _total }: { widget: WidgetDe
     let curRow = startRow
 
     const onMove = (ev: MouseEvent) => {
-      const nextCol = Math.max(1, Math.round(startCol + (ev.clientX - startX) / CELL))
-      const nextRow = Math.max(1, Math.round(startRow + (ev.clientY - startY) / CELL))
-      curCol = nextCol
-      curRow = nextRow
-      setDragSpan({ col: nextCol, row: nextRow })
+      curCol = Math.max(1, Math.round(startCol + (ev.clientX - startX) / CELL))
+      curRow = Math.max(1, Math.round(startRow + (ev.clientY - startY) / CELL))
+      setDragSpan({ col: curCol, row: curRow })
     }
     const onUp = () => {
       updateWidget(widget.id, { colSpan: curCol, rowSpan: curRow })
@@ -206,65 +222,43 @@ function WidgetCard({ widget, index: _index, total: _total }: { widget: WidgetDe
     window.addEventListener('mouseup', onUp)
   }
 
-  // ── HTML5 drag-to-reorder ─────────────────────────────────────────────────
-  const onDragStart = (e: React.DragEvent) => {
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', widget.id)
-    // Delay so the drag ghost captures the normal card state
-    setTimeout(() => (e.target as HTMLElement).closest('.widget-card')?.classList.add('dragging'), 0)
-  }
-  const onDragEnd = (e: React.DragEvent) => {
-    ;(e.target as HTMLElement).closest('.widget-card')?.classList.remove('dragging')
-  }
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.dataTransfer.dropEffect = 'move'
-    setDropTarget(true)
-  }
-  const onDragLeave = () => setDropTarget(false)
-  const onDrop = (e: React.DragEvent) => {
-    e.preventDefault()
-    setDropTarget(false)
-    const draggedId = e.dataTransfer.getData('text/plain')
-    if (!draggedId || draggedId === widget.id) return
-    const list = [...widgets]
-    const fromIdx = list.findIndex((w) => w.id === draggedId)
-    const toIdx = list.findIndex((w) => w.id === widget.id)
-    if (fromIdx === -1 || toIdx === -1) return
-    const [item] = list.splice(fromIdx, 1)
-    list.splice(toIdx, 0, item)
-    saveAll(list.map((w, i) => ({ ...w, order: i })))
-  }
-
-  /** Sends a structured prompt to the agent to rewrite/update this widget. */
+  // ── Ask Agent ─────────────────────────────────────────────────────────────
   const handleAskAgent = (guidance: string, currentCode: string) => {
-    const title = widget.title
-    const id = widget.id
     sendMessage(
-      `Please update the widget titled "${title}" (id: "${id}").\n\n` +
+      `Please update the widget titled "${widget.title}" (id: "${widget.id}").\n\n` +
       `Current code:\n\`\`\`js\n${currentCode}\n\`\`\`\n\n` +
       `Changes requested:\n${guidance}\n\n` +
       `When you're done, respond with a \`\`\`widget block that includes the same \`id\` field ` +
       `so the dashboard auto-installs the update:\n` +
-      `\`\`\`widget\n{"id":"${id}","title":"${title}","code":"...updated code..."}\n\`\`\`\n\n` +
+      `\`\`\`widget\n{"id":"${widget.id}","title":"${widget.title}","code":"...updated code..."}\n\`\`\`\n\n` +
       `After writing the code, briefly verify it's error-free by tracing through the logic. ` +
       `If the widget tests file (\`tests/presets.test.ts\`) could be extended for this widget, mention what test cases you'd add.`
     )
   }
 
+  const classNames = [
+    'widget-card',
+    isDragging ? 'dragging' : '',
+    insertBefore ? 'insert-before' : '',
+  ].filter(Boolean).join(' ')
+
   return (
     <>
       <div
-        className={`widget-card${dropTarget ? ' drop-target' : ''}`}
+        className={classNames}
         style={{ gridColumn: `span ${colSpan}`, gridRow: `span ${rowSpan}` }}
-        onDragOver={onDragOver}
-        onDragLeave={onDragLeave}
-        onDrop={onDrop}
+        onDragOver={onDragOverCard}
+        onDrop={(e) => { e.preventDefault(); onDropOnCard() }}
       >
+        {/* Drag handle is the header */}
         <div
           className="widget-card-header"
           draggable
-          onDragStart={onDragStart}
+          onDragStart={(e) => {
+            e.dataTransfer.effectAllowed = 'move'
+            e.dataTransfer.setData('text/plain', widget.id)
+            onDragStart()
+          }}
           onDragEnd={onDragEnd}
           onClick={() => setCollapsed((c) => !c)}
         >
@@ -291,7 +285,7 @@ function WidgetCard({ widget, index: _index, total: _total }: { widget: WidgetDe
           </div>
         )}
 
-        {/* Resize handle — bottom-right corner */}
+        {/* Grid resize handle — bottom-right corner */}
         <div
           className="widget-resize-handle"
           onMouseDown={onResizeStart}
@@ -315,8 +309,6 @@ function WidgetCard({ widget, index: _index, total: _total }: { widget: WidgetDe
 }
 
 // ── Widget Panel ──────────────────────────────────────────────────────────────
-// Sent when the user clicks "🤖 AI" — briefs the agent on the widget system
-// without commanding it to create anything immediately.
 const WIDGET_CONTEXT_PROMPT = `
 The user is on the widget panel of the clawd-dashboard and may want to add a new widget. Here's a full briefing on how the widget system works so you can help them when they describe what they want.
 
@@ -346,19 +338,16 @@ The dashboard will match by id and update in place.
 **Widget code rules:**
 - Define a function named \`Widget()\` that returns \`React.createElement(...)\`
 - **No JSX** — the code runs directly via \`new Function()\`, no transpilation
-- Available globals (injected automatically): \`React\`, \`useState\`, \`useEffect\`, \`useMemo\`, \`useCallback\`, \`useRef\`, \`fetch\`, \`exec(cmd)\`, \`console\`
-- \`exec(cmd)\` runs a shell command in the sandbox → \`Promise<{stdout, stderr, exitCode}>\`
-- Use CSS variables for theming: \`var(--text-primary)\`, \`var(--text-secondary)\`, \`var(--text-muted)\`, \`var(--bg-surface)\`, \`var(--bg-elevated)\`, \`var(--accent)\`, \`var(--accent-bright)\`, \`var(--accent-dim)\`, \`var(--accent-glow)\`, \`var(--border)\`, \`var(--border-light)\`, \`var(--mono)\`, \`var(--green)\`, \`var(--red)\`, \`var(--yellow)\`, \`var(--blue)\`, \`var(--cyan)\`
-- For charts/graphs, use inline SVG — no external libraries are available
-- For live/polling data, use \`setInterval\` inside \`useEffect\` and always clear on cleanup
-- For persistent state across page reloads, use \`localStorage\`
+- Available globals: \`React\`, \`useState\`, \`useEffect\`, \`useMemo\`, \`useCallback\`, \`useRef\`, \`fetch\`, \`exec(cmd)\`, \`console\`
+- \`exec(cmd)\` → \`Promise<{stdout, stderr, exitCode}>\` — runs shell commands in the sandbox
+- Use CSS variables for theming: \`var(--accent)\`, \`var(--text-primary)\`, \`var(--bg-surface)\`, \`var(--green)\`, \`var(--red)\`, etc.
+- For charts, use inline SVG; for polling data, use \`setInterval\` inside \`useEffect\` with cleanup
 - Keep widgets self-contained — no imports, no external scripts
 
 **Writing tests for widgets:**
 After creating a widget, consider whether any logic should be verified in \`tests/presets.test.ts\`. For example:
 - The widget code should compile without throwing (call \`new Function(...)\` and verify a Widget function is returned)
 - If the widget has pure data-transform logic, extract it into a testable helper
-- Runtime behavior (fetch, exec) can be tested with mocks in the Vitest suite
 
 **Example (minimal):**
 \`\`\`widget
@@ -369,11 +358,96 @@ What kind of widget would you like to add?
 `.trim()
 
 export function WidgetPanel({ width }: { width: number }) {
-  const { widgets, loading, addWidget } = useWidgetStore()
+  const { widgets, loading, addWidget, saveAll } = useWidgetStore()
   const { sendMessage } = useGatewayStore()
   const [showNew, setShowNew] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
 
+  // ── Drag-to-reorder state (panel-level) ────────────────────────────────────
+  // draggingId   — which widget is currently being dragged
+  // insertBeforeId — which widget id to insert before; null = append to end
+  const [draggingId, setDraggingId] = useState<string | null>(null)
+  const [insertBeforeId, setInsertBeforeId] = useState<string | null>(null)
+  // Ref mirrors insertBeforeId to avoid stale closure in dragover (fires 30+/s)
+  const insertBeforeRef = useRef<string | null>(null)
+
+  const handleDragStart = (id: string) => {
+    setDraggingId(id)
+    setInsertBeforeId(null)
+    insertBeforeRef.current = null
+  }
+
+  const handleDragEnd = () => {
+    setDraggingId(null)
+    setInsertBeforeId(null)
+    insertBeforeRef.current = null
+  }
+
+  /**
+   * Called when the mouse moves over a widget card during a drag.
+   * Determines insert position by comparing mouse Y to the card's vertical midpoint:
+   *   top half → insert before this card
+   *   bottom half → insert before the NEXT card (= after this one)
+   */
+  const handleDragOverCard = (targetId: string, e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    if (!draggingId || targetId === draggingId) return
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const isTopHalf = e.clientY < rect.top + rect.height / 2
+
+    let newInsert: string | null
+    if (isTopHalf) {
+      newInsert = targetId
+    } else {
+      // Insert after targetId = insert before the next widget in the list
+      const targetIdx = widgets.findIndex((w) => w.id === targetId)
+      const next = widgets[targetIdx + 1]
+      newInsert = next ? next.id : null // null = append to end
+    }
+
+    // Skip if hovering over the dragged card's own natural insert slot (no-op)
+    if (newInsert === draggingId) return
+
+    if (newInsert !== insertBeforeRef.current) {
+      insertBeforeRef.current = newInsert
+      setInsertBeforeId(newInsert)
+    }
+  }
+
+  /** Called when dragging over the end-zone (empty area after all widgets). */
+  const handleDragOverEnd = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    if (insertBeforeRef.current !== null) {
+      insertBeforeRef.current = null
+      setInsertBeforeId(null)
+    }
+  }
+
+  /** Executes the reorder on drop. */
+  const handleDrop = () => {
+    if (!draggingId) return
+
+    const list = [...widgets]
+    const fromIdx = list.findIndex((w) => w.id === draggingId)
+    if (fromIdx === -1) { handleDragEnd(); return }
+
+    const [item] = list.splice(fromIdx, 1)
+
+    const target = insertBeforeRef.current
+    if (target === null) {
+      // Append to end
+      list.push(item)
+    } else {
+      const toIdx = list.findIndex((w) => w.id === target)
+      if (toIdx === -1) { list.push(item) } else { list.splice(toIdx, 0, item) }
+    }
+
+    saveAll(list.map((w, i) => ({ ...w, order: i })))
+    handleDragEnd()
+  }
+
+  // ── Preset / AI handlers ──────────────────────────────────────────────────
   const handleAskAgent = () => sendMessage(WIDGET_CONTEXT_PROMPT)
 
   const handleAddPreset = async (preset: PresetDef) => {
@@ -431,9 +505,27 @@ export function WidgetPanel({ width }: { width: number }) {
           </div>
         )}
 
-        {widgets.map((w, i) => (
-          <WidgetCard key={w.id} widget={w} index={i} total={widgets.length} />
+        {widgets.map((w) => (
+          <WidgetCard
+            key={w.id}
+            widget={w}
+            isDragging={draggingId === w.id}
+            insertBefore={draggingId !== null && insertBeforeId === w.id}
+            onDragStart={() => handleDragStart(w.id)}
+            onDragEnd={handleDragEnd}
+            onDragOverCard={(e) => handleDragOverCard(w.id, e)}
+            onDropOnCard={handleDrop}
+          />
         ))}
+
+        {/* End-zone: always rendered when dragging so you can drop into empty space */}
+        {draggingId && (
+          <div
+            className={`widget-end-zone${insertBeforeId === null ? ' targeted' : ''}`}
+            onDragOver={handleDragOverEnd}
+            onDrop={(e) => { e.preventDefault(); handleDrop() }}
+          />
+        )}
       </div>
 
       {showNew && (
