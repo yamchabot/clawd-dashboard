@@ -39,26 +39,13 @@
       "rowSpan": 3
     },
     {
-      "title": "Digital Clock",
-      "description": "Live clock with date display",
-      "code": "function Widget() {\n  const [t, setT] = React.useState(new Date());\n  useEffect(() => {\n    const id = setInterval(() => setT(new Date()), 1000);\n    return () => clearInterval(id);\n  }, []);\n  const p = n => String(n).padStart(2, '0');\n  const time = p(t.getHours()) + ':' + p(t.getMinutes()) + ':' + p(t.getSeconds());\n  const date = t.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });\n  return React.createElement('div', { style: { textAlign: 'center', padding: '12px 8px' } },\n    React.createElement('div', {\n      style: {\n        fontSize: '30px', fontFamily: 'var(--mono)', fontWeight: 700,\n        color: 'var(--accent-bright)', letterSpacing: '3px', lineHeight: 1\n      }\n    }, time),\n    React.createElement('div', {\n      style: { fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }\n    }, date)\n  );\n}",
-      "size": "sm",
-      "id": "f37b2537-51be-4537-b832-7f9f5c46a77e",
-      "enabled": true,
-      "order": 3,
-      "createdAt": 1771768793454,
-      "updatedAt": 1771808229195,
-      "colSpan": 3,
-      "rowSpan": 2
-    },
-    {
       "title": "Quick Notes",
       "description": "Scratch pad that saves locally",
       "code": "function Widget() {\n  const KEY = 'oc-widget-quicknotes';\n  const [text, setText] = React.useState(() => localStorage.getItem(KEY) || '');\n  const onChange = e => {\n    setText(e.target.value);\n    localStorage.setItem(KEY, e.target.value);\n  };\n  return React.createElement('div', null,\n    React.createElement('textarea', {\n      value: text,\n      onChange,\n      placeholder: 'Type notes here...',\n      style: {\n        width: '100%', minHeight: '90px', resize: 'vertical',\n        background: 'var(--bg-surface)', border: '1px solid var(--border)',\n        borderRadius: '4px', padding: '8px', color: 'var(--text-primary)',\n        fontFamily: 'var(--sans)', fontSize: '12px', lineHeight: 1.5,\n        outline: 'none'\n      }\n    }),\n    React.createElement('div', {\n      style: { fontSize: '10px', color: 'var(--text-muted)', textAlign: 'right', marginTop: '3px' }\n    }, text.length + ' chars')\n  );\n}",
       "size": "md",
       "id": "5be26b0e-ecbd-49ac-b095-1046c235f0b0",
       "enabled": true,
-      "order": 4,
+      "order": 3,
       "createdAt": 1771768797103,
       "updatedAt": 1771768797103
     },
@@ -69,9 +56,22 @@
       "size": "md",
       "id": "bbdab7b1-f783-4282-9a95-d67a071fc003",
       "enabled": true,
-      "order": 5,
+      "order": 4,
       "createdAt": 1771808819912,
       "updatedAt": 1771808819912
+    },
+    {
+      "title": "Digital Clock",
+      "description": "Live clock with date display",
+      "code": "function Widget() {\n  const [t, setT] = React.useState(new Date());\n  useEffect(() => {\n    const id = setInterval(() => setT(new Date()), 1000);\n    return () => clearInterval(id);\n  }, []);\n  const p = n => String(n).padStart(2, '0');\n  const time = p(t.getHours()) + ':' + p(t.getMinutes()) + ':' + p(t.getSeconds());\n  const date = t.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });\n  return React.createElement('div', { style: { textAlign: 'center', padding: '12px 8px' } },\n    React.createElement('div', {\n      style: {\n        fontSize: '30px', fontFamily: 'var(--mono)', fontWeight: 700,\n        color: 'var(--accent-bright)', letterSpacing: '3px', lineHeight: 1\n      }\n    }, time),\n    React.createElement('div', {\n      style: { fontSize: '12px', color: 'var(--text-muted)', marginTop: '6px' }\n    }, date)\n  );\n}",
+      "size": "sm",
+      "id": "f37b2537-51be-4537-b832-7f9f5c46a77e",
+      "enabled": true,
+      "order": 5,
+      "createdAt": 1771768793454,
+      "updatedAt": 1771808229195,
+      "colSpan": 3,
+      "rowSpan": 2
     }
   ]
 }

@@ -161,30 +161,29 @@ function WidgetPickerModal({
   )
 }
 
-// 80px cells + 8px gap → one cell = 88px
-const CELL = 88
+// Grid geometry constants (must match CSS)
+const CELL_SIZE = 80  // px — one grid cell
+const GAP = 8         // px — grid gap
+const STEP = CELL_SIZE + GAP   // = 88px per cell+gap
+const GRID_PAD = 8    // px — grid container padding
+const CELL = STEP     // alias kept for resize-handle math
+
 const DEFAULT_COLS = 2
 const DEFAULT_ROWS = 2
 
 // ── Widget Card ───────────────────────────────────────────────────────────────
 interface WidgetCardProps {
   widget: WidgetDef
-  isDragging: boolean       // this card is currently being dragged
-  insertBefore: boolean     // show "drop here" indicator above this card
+  isDragging: boolean
   onDragStart: () => void
   onDragEnd: () => void
-  onDragOverCard: (e: React.DragEvent<HTMLDivElement>) => void
-  onDropOnCard: () => void
 }
 
 function WidgetCard({
   widget,
   isDragging,
-  insertBefore,
   onDragStart,
   onDragEnd,
-  onDragOverCard,
-  onDropOnCard,
 }: WidgetCardProps) {
   const { updateWidget, removeWidget } = useWidgetStore()
   const { sendMessage } = useGatewayStore()
@@ -236,21 +235,19 @@ function WidgetCard({
     )
   }
 
-  const classNames = [
-    'widget-card',
-    isDragging ? 'dragging' : '',
-    insertBefore ? 'insert-before' : '',
-  ].filter(Boolean).join(' ')
+  const colStart = widget.colStart
+  const rowStart = widget.rowStart
 
   return (
     <>
       <div
-        className={classNames}
-        style={{ gridColumn: `span ${colSpan}`, gridRow: `span ${rowSpan}` }}
-        onDragOver={onDragOverCard}
-        onDrop={(e) => { e.preventDefault(); onDropOnCard() }}
+        className={`widget-card${isDragging ? ' dragging' : ''}`}
+        style={{
+          gridColumn: colStart ? `${colStart} / span ${colSpan}` : `span ${colSpan}`,
+          gridRow:    rowStart ? `${rowStart} / span ${rowSpan}` : `span ${rowSpan}`,
+        }}
       >
-        {/* Drag handle is the header */}
+        {/* Drag handle is the header — dragover/drop handled by the grid container */}
         <div
           className="widget-card-header"
           draggable
@@ -363,90 +360,76 @@ export function WidgetPanel({ width }: { width: number }) {
   const [showNew, setShowNew] = useState(false)
   const [showPicker, setShowPicker] = useState(false)
 
-  // ── Drag-to-reorder state (panel-level) ────────────────────────────────────
-  // draggingId state  — used for rendering (isDragging prop, end-zone visibility)
-  // draggingIdRef     — used in ALL handler logic to avoid stale closures
-  //                     (dragover fires before React has re-rendered after dragstart)
-  // insertBeforeId state — used for rendering (insert-before highlight)
-  // insertBeforeRef   — used in handleDrop to avoid stale closure
+  // ── Grid-cell drag-to-place state ─────────────────────────────────────────
+  // Drag now snaps to specific grid cells (col, row) rather than insert-before.
+  // This lets the user place widgets at explicit positions, leaving empty gaps.
+  //
+  // draggingId/Ref — which widget is being dragged (state for rendering, ref for handlers)
+  // dragCell/Ref   — which grid cell the ghost is currently snapped to
+  // gridRef        — ref to the .widget-grid element for hit-testing
   const [draggingId, setDraggingId] = useState<string | null>(null)
   const draggingIdRef = useRef<string | null>(null)
-  const [insertBeforeId, setInsertBeforeId] = useState<string | null>(null)
-  const insertBeforeRef = useRef<string | null>(null)
+  const [dragCell, setDragCell] = useState<{ col: number; row: number } | null>(null)
+  const dragCellRef = useRef<{ col: number; row: number } | null>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
 
   const handleDragStart = (id: string) => {
     draggingIdRef.current = id
     setDraggingId(id)
-    insertBeforeRef.current = null
-    setInsertBeforeId(null)
   }
 
   const handleDragEnd = () => {
     draggingIdRef.current = null
     setDraggingId(null)
-    insertBeforeRef.current = null
-    setInsertBeforeId(null)
+    dragCellRef.current = null
+    setDragCell(null)
   }
 
   /**
-   * Called when the mouse moves over a widget card during a drag.
-   * Uses draggingIdRef (not state) to avoid stale closure — dragover fires
-   * immediately after dragstart, before React has flushed the state update.
+   * Convert a mouse position (from a drag event on the grid container) to
+   * a (col, row) grid cell, snapped to valid bounds.
    */
-  const handleDragOverCard = (targetId: string, e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    const dragId = draggingIdRef.current
-    if (!dragId || targetId === dragId) return
-
-    const rect = e.currentTarget.getBoundingClientRect()
-    const isTopHalf = e.clientY < rect.top + rect.height / 2
-
-    let newInsert: string | null
-    if (isTopHalf) {
-      newInsert = targetId
-    } else {
-      const targetIdx = widgets.findIndex((w) => w.id === targetId)
-      const next = widgets[targetIdx + 1]
-      newInsert = next ? next.id : null // null = append to end
-    }
-
-    if (newInsert === dragId) return
-
-    if (newInsert !== insertBeforeRef.current) {
-      insertBeforeRef.current = newInsert
-      setInsertBeforeId(newInsert)
-    }
+  const mouseToCell = (e: React.DragEvent<HTMLDivElement>, colSpan: number) => {
+    const el = gridRef.current
+    if (!el) return null
+    const rect = el.getBoundingClientRect()
+    const x = e.clientX - rect.left - GRID_PAD
+    const y = e.clientY - rect.top  - GRID_PAD
+    const rawCol = Math.max(1, Math.floor(x / STEP) + 1)
+    const rawRow = Math.max(1, Math.floor(y / STEP) + 1)
+    const numCols = Math.max(1, Math.floor((el.clientWidth - GRID_PAD) / STEP))
+    const col = Math.min(rawCol, Math.max(1, numCols - colSpan + 1))
+    return { col, row: rawRow }
   }
 
-  /** Called when dragging over the end-zone (empty area after all widgets). */
-  const handleDragOverEnd = (e: React.DragEvent<HTMLDivElement>) => {
+  /** dragover on the grid container — calculates and tracks target cell */
+  const handleDragOverGrid = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
-    if (insertBeforeRef.current !== null) {
-      insertBeforeRef.current = null
-      setInsertBeforeId(null)
-    }
-  }
-
-  /** Executes the reorder on drop. Uses refs (not state) to avoid stale closures. */
-  const handleDrop = () => {
     const dragId = draggingIdRef.current
     if (!dragId) return
-
-    const list = [...widgets]
-    const fromIdx = list.findIndex((w) => w.id === dragId)
-    if (fromIdx === -1) { handleDragEnd(); return }
-
-    const [item] = list.splice(fromIdx, 1)
-
-    const target = insertBeforeRef.current
-    if (target === null) {
-      list.push(item)
-    } else {
-      const toIdx = list.findIndex((w) => w.id === target)
-      if (toIdx === -1) { list.push(item) } else { list.splice(toIdx, 0, item) }
+    const w = widgets.find((w) => w.id === dragId)
+    const colSpan = w?.colSpan ?? DEFAULT_COLS
+    const cell = mouseToCell(e, colSpan)
+    if (!cell) return
+    if (cell.col !== dragCellRef.current?.col || cell.row !== dragCellRef.current?.row) {
+      dragCellRef.current = cell
+      setDragCell({ ...cell })
     }
+  }
 
-    saveAll(list.map((w, i) => ({ ...w, order: i })))
+  /** drop on the grid container — commits the widget to the target cell */
+  const handleDropOnGrid = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    const dragId = draggingIdRef.current
+    const cell = dragCellRef.current
+    if (!dragId || !cell) { handleDragEnd(); return }
+
+    const updated = widgets.map((w) =>
+      w.id === dragId
+        ? { ...w, colStart: cell.col, rowStart: cell.row, updatedAt: Date.now() }
+        : w,
+    )
+    saveAll(updated.map((w, i) => ({ ...w, order: i })))
     handleDragEnd()
   }
 
@@ -496,7 +479,13 @@ export function WidgetPanel({ width }: { width: number }) {
         </div>
       </div>
 
-      <div className="widget-grid">
+      {/* Grid container — handles all dragover/drop for cell-snap placement */}
+      <div
+        className="widget-grid"
+        ref={gridRef}
+        onDragOver={handleDragOverGrid}
+        onDrop={handleDropOnGrid}
+      >
         {!loading && widgets.length === 0 && (
           <div className="empty-state" style={{ minHeight: '140px', gridColumn: '1 / -1' }}>
             <div className="empty-state-icon">📊</div>
@@ -513,22 +502,28 @@ export function WidgetPanel({ width }: { width: number }) {
             key={w.id}
             widget={w}
             isDragging={draggingId === w.id}
-            insertBefore={draggingId !== null && insertBeforeId === w.id}
             onDragStart={() => handleDragStart(w.id)}
             onDragEnd={handleDragEnd}
-            onDragOverCard={(e) => handleDragOverCard(w.id, e)}
-            onDropOnCard={handleDrop}
           />
         ))}
 
-        {/* End-zone: always rendered when dragging so you can drop into empty space */}
-        {draggingId && (
-          <div
-            className={`widget-end-zone${insertBeforeId === null ? ' targeted' : ''}`}
-            onDragOver={handleDragOverEnd}
-            onDrop={(e) => { e.preventDefault(); handleDrop() }}
-          />
-        )}
+        {/* Ghost card — absolutely positioned at the target cell while dragging */}
+        {draggingId && dragCell && (() => {
+          const w = widgets.find((w) => w.id === draggingId)
+          const cs = w?.colSpan ?? DEFAULT_COLS
+          const rs = w?.rowSpan ?? DEFAULT_ROWS
+          return (
+            <div
+              className="widget-drag-ghost"
+              style={{
+                left:   GRID_PAD + (dragCell.col - 1) * STEP,
+                top:    GRID_PAD + (dragCell.row - 1) * STEP,
+                width:  cs * CELL_SIZE + (cs - 1) * GAP,
+                height: rs * CELL_SIZE + (rs - 1) * GAP,
+              }}
+            />
+          )
+        })()}
       </div>
 
       {showNew && (

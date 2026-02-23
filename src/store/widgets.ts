@@ -18,6 +18,8 @@ export interface WidgetDef {
   size?: 'sm' | 'md' | 'lg' | 'xl'
   colSpan?: number     // grid column span (1 = 80px, 2 = 168px, etc.)
   rowSpan?: number     // grid row span (1 = 80px, 2 = 168px, etc.)
+  colStart?: number    // explicit grid-column-start (1-indexed); undefined = CSS auto-place
+  rowStart?: number    // explicit grid-row-start (1-indexed); undefined = CSS auto-place
   order?: number
   enabled?: boolean
   createdAt: number
